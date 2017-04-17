@@ -1,0 +1,13 @@
+# Python files
+venv/
+*.pyc
+*.pyo
+test.py
+
+# Generated lib files
+src/lib/*
+devstart.cfg
+!src/lib/__init__.py
+
+# Developer files
+.source
