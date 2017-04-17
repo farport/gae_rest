@@ -59,12 +59,14 @@ class Singleton(type):
         ...
     '''
     def __init__(cls, name, bases, dct):
-        #print "### Singleton called for class %s" % name
+        # print("### Singleton called for class %s" % name)
         super(Singleton, cls).__init__(name, bases, dct)
         cls.instance = None
 
-    def __call__(cls, *args, **kwargs): #@NoSelf
+    def __call__(cls, *args, **kwargs):
         if cls.instance is None:
+            # print("### New Instance of %s" % cls.__name__)
+            # print("### dir: %s" % ','.join([x for x in cls.__dict__]))
             cls.instance = super(Singleton, cls).__call__(*args, **kwargs)
         return cls.instance
 
@@ -95,8 +97,10 @@ class ConfigurationStore(object):
         This method searches for file in the ../config directory from the current script directory
         in the following order:
            a. dev.json
-           b. config.json
-           c. app.json
+           b. qa.json
+           c. uat.json
+           d. prod.json
+           e. app.json
 
         The @classmethod decoration created only for unit testing purpose
         '''
@@ -105,10 +109,11 @@ class ConfigurationStore(object):
 
         # Set the config file
         config_file = None
+        config_dir = None
         if in_config_file:
             # If config file is passed, the config directory is the dir of the config file
             if os.path.isfile(in_config_file):
-                config_file = in_config_file
+                config_file = os.path.realpath(in_config_file)
                 config_dir = os.path.dirname(config_file)
         else:
             if in_caller_file is None:
@@ -120,18 +125,18 @@ class ConfigurationStore(object):
                 # `./config` in relation to in_caller_file
                 base_dir = os.path.dirname(in_caller_file)
 
-            config_dir = os.path.normpath(os.path.join(base_dir, "config"))
+            config_dir = os.path.join(base_dir, "config")
 
             # Search for the config file
-            for file_name in ("dev.json", "config.json", "app.json"):
+            for file_name in ("dev.json", "qa.json", "uat.json", "prod.json", "app.json"):
                 check_file = os.path.join(config_dir, file_name)
                 if os.path.exists(check_file):
-                    config_file = check_file
+                    config_file = os.path.realpath(check_file)
                     break
 
         # Set the local override file
         local_config = None
-        if os.path.isdir(config_dir):
+        if config_dir and os.path.isdir(config_dir):
             # Allow caller to override the name of the local file
             if in_local_name:
                 local_name = in_local_name
@@ -140,9 +145,9 @@ class ConfigurationStore(object):
 
             check_file = os.path.join(config_dir, local_name)
             if os.path.isfile(check_file):
-                local_config = check_file
+                local_config = os.path.realpath(check_file)
 
-            cls._config_dir = config_dir
+            cls._config_dir = os.path.realpath(config_dir)
 
         return config_file, local_config
 
@@ -182,8 +187,8 @@ class ConfigurationStore(object):
             self.__apply_json_config(local_config)
 
         # Set the default, expected value
-        self.__set_default_config_value('APP', 'App Name')
-        self.__set_default_config_value('INST', 'dev')
+        self.__set_default_config_value('APP', None)
+        self.__set_default_config_value('INST', None)
         self.__set_default_config_value('RUN_MODE', 'dev')
 
         # Set logger
@@ -259,6 +264,7 @@ class ConfigurationStore(object):
     def unload(cls):
         '''Setting the class' instance to None forcing the re-initialization.'''
         trace("Unloading ConfigurationStore")
+        cls._config_dir = None
         ConfigurationStore.instance = None
 
     #

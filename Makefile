@@ -15,6 +15,7 @@ PYLIB_REQ     = requirements.txt
 PYLIB_SRC     = $(SRC)/lib
 PKG_DEF       = flask jinja2 markupsafe itsdangerous click werkzeug six
 GAE_SDK       = "/Developer/Google/google_appengine"
+SHARED_DEVLIB = "/Users/linm/dev/farport/gae_rest/devshared"
 
 # ------------------
 # USAGE: First target called if no target specified
@@ -31,18 +32,18 @@ endif
 	@mkdir -p $(PYENV)
 	@virtualenv $(PYENV)
 
-
-$(PYENV)/pylib_req.txt : $(PYLIB_REQ)
+$(PYENV)/requirements.txt : $(PYLIB_REQ)
 	@$(PIP) install -r $(PYLIB_REQ)
 	@cp -a $(PYLIB_REQ) $@
 	@echo $(GAE_SDK) > $(PYENV)/lib/python2.7/site-packages/google_appengine.pth
+	@echo $(SHARED_DEVLIB) > $(PYENV)/lib/python2.7/site-packages/devshared.pth
 
 $(PYLIB_SRC):
 	@mkdir -p $(PYLIB_SRC)
 
 # ------------------
-# MAIN TARGETS	
-virtualenv : $(PIP) $(PYENV)/pylib_req.txt $(PYLIB_SRC)
+# MAIN TARGETS
+virtualenv : $(PIP) $(PYENV)/requirements.txt $(PYLIB_SRC)
 
 setup_lib : $(PYENV)/lib/python2.7/site-packages
 	@for dir in $(PKG_DEF); do \
@@ -55,7 +56,6 @@ setup_lib : $(PYENV)/lib/python2.7/site-packages
 	done
 
 setup : virtualenv setup_lib
-
 
 
 # ------------------
