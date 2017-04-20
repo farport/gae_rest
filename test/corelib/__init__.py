@@ -8,6 +8,8 @@ from . import tests
 
 import testlib
 
+TRUNNER = testlib.TestRunner()
+
 
 def getTaskFromCurrentPackage(task_name):
     return 'corelib.%s' % task_name
@@ -15,7 +17,7 @@ def getTaskFromCurrentPackage(task_name):
 
 @task
 def configuration_store():
-    testlib.run_tests([tests.TestConfigurationStore])
+    TRUNNER.add(tests.TestConfigurationStore)
 
 # @needs([getTaskFromCurrentPackage('configuration_store')])
 @task

@@ -10,9 +10,11 @@ from __future__ import print_function
 
 import os
 import sys
+import json
 import unittest
 import logging
 
+# Allow import from src
 def _initialize_lib():
     '''Add src folder'''
     src_dir = os.path.join(os.path.dirname(__file__), "..", "..", "src")
@@ -24,39 +26,73 @@ def _initialize_lib():
 
 _initialize_lib()
 
-# Import from src
+
+# Basic init for app engine
 from core import Singleton
+# Make App Enginge Works
+import dev_appserver
+dev_appserver.fix_sys_path()
+
+# Hack to solve the problem with 2 google packages
+file_dir = os.path.dirname(__file__)
+with open(os.path.join(file_dir, "..", "..", "venv", "lib", "python2.7", "site-packages", "google_appengine.pth")) as fh:
+    for line in fh:
+        appengine_sdk_path = line.rstrip()
+
+import google
+google.__path__.append(os.path.join(appengine_sdk_path, "google"))
+
+from google.appengine.ext import testbed
+from google.appengine.datastore import datastore_stub_util
 
 
-def run_tests(tcases, verbosity=2, failfast=True):
-    testSuite = unittest.TestSuite()
-    for tcase in tcases:
+class TestRunner(object):
+    __metaclass__ = Singleton
+
+    @classmethod
+    def _log_test(cls, test_case, mode):
+        if mode:
+            message = "UNIT TEST for '%s' with datastore mode of '%s" % (test_case.__name__, mode)
+        else:
+            message = "UNIT TEST for '%s'" % test_case.__name__
+
         print('''
 #---------------------------------------------------------------------
-# START UNIT TEST for '%s'
-''' % tcase.__name__)
+# %s
+''' % message)
 
-        testSuite.addTest(unittest.makeSuite(tcase))
-        testRunner = unittest.TextTestRunner(verbosity=verbosity, failfast=failfast)
-        testRunner.run(testSuite)
+    @classmethod
+    def run(cls, test_case, verbosity=2, failfast=True):
+        '''Run one test case at a time'''
+        gaetest = AppEngineTestbed()
 
+        # Set datastore_mode if needed
+        if hasattr(test_case, 'datastore_mode'):
+            mode = test_case.datastore_mode
+            cls._log_test(test_case, mode)
+            gaetest.set_mode(mode)
+        else:
+            cls._log_test(test_case, None)
 
-def app_enginge_init():
-    '''Initialize app engine'''
-    import dev_appserver
-    dev_appserver.fix_sys_path()
+        runner = unittest.TextTestRunner(verbosity=verbosity, failfast=failfast)
+        runner.run(unittest.makeSuite(test_case))
 
-    # Hack to solve the problem with 2 google packages
-    file_dir = os.path.dirname(__file__)
-    with open(os.path.join(file_dir, "..", "..", "venv", "lib", "python2.7", "site-packages", "google_appengine.pth")) as fh:
-        for line in fh:
-            appengine_sdk_path = line.rstrip()
+    @classmethod
+    def run_all(cls, test_cases, verbosity=2, failfast=True):
+        '''Pass a list of test cases and call .run method'''
+        for tcase in test_cases:
+            cls.run(tcase, verbosity, failfast)
 
-    import google
-    google.__path__.append(os.path.join(appengine_sdk_path, "google"))
+    def __init__(self):
+        self._tcases = []
 
-    from google.appengine.ext import testbed
-    from google.appengine.datastore import datastore_stub_util
+    def add(self, test_case):
+        '''Store the test case passed to be ran later with .run_added'''
+        self._tcases.append(test_case)
+
+    def run_added(self, verbosity=2, failfast=True):
+        '''Run stored test cases'''
+        self.run_all(self._tcases, verbosity, failfast)
 
 
 class AppEngineTestbed(object):
@@ -72,40 +108,74 @@ class AppEngineTestbed(object):
     '''
     __metaclass__ = Singleton
     _testbed = None
+    _datastore_mode = None
 
-    def __init__(self, datastore_mode='normal', show_message=True):
-        if not datastore_mode or datastore_mode == 'none':
-            return
+    def __set_datastore_mode(self, mode, show_message):
+        tb = self._testbed
 
-        tb = testbed.Testbed()
-        tb.activate()
-
-        if show_message:
-            print("\n# Testbest started with '%s' mode\n" % datastore_mode)
-
-        if datastore_mode == "normal":
-            tb.init_datastore_v3_stub()
-        elif datastore_mode == "HR":
-            # Test to High Replication mode with 100% percent probability of writes being applied
-            # Ie: global query without ancestry should always return items after .put()
-            # REF: https://cloud.google.com/appengine/docs/python/tools/localunittesting
-            policy = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
-            tb.init_datastore_v3_stub(consistency_policy=policy)
-        elif datastore_mode == "HR_P0":
-            # Test to High Replication mode with 0% percent probabily of writes being applied
-            # Ie: global query without ancestry should never return items after .put()
-            policy = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=0)
-            tb.init_datastore_v3_stub(consistency_policy=policy)
+        if mode is None:
+            tb.deactivate()
+            if show_message:
+                print("\n# Testbest deactivated")
         else:
-            raise ValueError("Unsupported datastore_mode '%s'" % datastore_mode)
+            tb.activate()
+            if mode == "normal":
+                tb.init_datastore_v3_stub()
+            elif mode == "HR":
+                # Test to High Replication mode with 100% percent probability of writes being applied
+                # Ie: global query without ancestry should always return items after .put()
+                # REF: https://cloud.google.com/appengine/docs/python/tools/localunittesting
+                policy = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
+                tb.init_datastore_v3_stub(consistency_policy=policy)
+            elif mode == "HR_P0":
+                # Test to High Replication mode with 0% percent probabily of writes being applied
+                # Ie: global query without ancestry should never return items after .put()
+                policy = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=0)
+                tb.init_datastore_v3_stub(consistency_policy=policy)
+            else:
+                raise ValueError("Unsupported datastore_mode '%s'" % mode)
 
-        # Prepare queue
-        tb.init_taskqueue_stub(
-            root_path=os.path.join(os.path.dirname(__file__), '../resources'))
-        self.taskqueue_stub = tb.get_stub(testbed.TASKQUEUE_SERVICE_NAME)
+            if show_message:
+                print("\n# Testbest started with '%s' mode\n" % mode)
 
-        tb.init_memcache_stub()
-        self._testbed = tb
+            # Prepare queue
+            tb.init_taskqueue_stub(
+                root_path=os.path.join(os.path.dirname(__file__), '../resources'))
+            self.taskqueue_stub = tb.get_stub(testbed.TASKQUEUE_SERVICE_NAME)
+
+            # Prepare memcache
+            tb.init_memcache_stub()
+
+
+    def set_mode(self, mode, show_message=False):
+        '''
+        Check if datastore_mode needs to be changed
+        '''
+
+        mode_changed = False
+
+        # Data cleanup
+        if mode == 'none':
+            mode = None
+
+        # Change detection
+        if self._datastore_mode is None and mode is None:
+            mode_changed = False
+        elif self._datastore_mode is not None and mode is None:
+            mode_changed = True
+        elif self._datastore_mode is None and mode is not None:
+            mode_changed = True
+        elif self._datastore_mode == mode:
+            mode_changed = False
+        else:
+            mode_changed = True
+
+        if mode_changed:
+            self.__set_datastore_mode(mode, show_message)
+            self._datastore_mode = mode
+
+    def __init__(self):
+        self._testbed = testbed.Testbed()
 
     def deactivate(self):
         self.unload()
@@ -119,7 +189,7 @@ class AppEngineTestbed(object):
         '''Setting the class' instance to None forcing the re-initialization.'''
         inst = AppEngineTestbed.instance
         if inst is not None:
-            if inst._testbed is not None:
+            if cls._datastore_mode:
                 # print "\n### DE-ACTIVATE and UNLOAD TESTBED ###\n"
                 inst._testbed.deactivate()
             # else:
@@ -142,6 +212,30 @@ def run_tests(filename, test_pack, verbosity=2, failfast=True):
     testRunner.run(testSuite)
     testbed.unload()
 '''
+
+# DATA RELATED
+class JsonDataReader(object):
+    '''
+    Read the JSON from the data directory returning DictToProperty object
+    '''
+    def __init__(self, script_file=None):
+        if script_file is None:
+            script_file = __file__
+        data_dir = os.path.join(os.path.dirname(script_file), 'data')
+        if os.path.isdir(data_dir):
+            self._data_dir = os.path.realpath(data_dir)
+        else:
+            raise IOError("Required directory not found: %s" % data_dir)
+
+    def get(self, *paths):
+        '''
+        Return the json data
+        '''
+        data_file = os.path.join(self._data_dir, *paths)
+        with open(data_file, "r") as _:
+            data = json.load(_)
+        return DictToProperty(data)
+
 
 class DictToProperty(dict):
     def __init__(self, *args, **kwargs):
