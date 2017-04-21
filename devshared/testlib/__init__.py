@@ -13,6 +13,7 @@ import sys
 import json
 import unittest
 import logging
+import StringIO
 
 # Allow import from src
 def _initialize_lib():
@@ -26,22 +27,23 @@ def _initialize_lib():
 
 _initialize_lib()
 
-
 # Basic init for app engine
 from core import Singleton
 # Make App Enginge Works
 import dev_appserver
 dev_appserver.fix_sys_path()
 
-# Hack to solve the problem with 2 google packages
-file_dir = os.path.dirname(__file__)
-with open(os.path.join(file_dir, "..", "..", "venv", "lib", "python2.7", "site-packages", "google_appengine.pth")) as fh:
-    for line in fh:
-        appengine_sdk_path = line.rstrip()
+# Import Google packages
+def _google_package_hack():
+    '''Hack to solve the problem with 2 google packages'''
+    file_dir = os.path.dirname(__file__)
+    with open(os.path.join(file_dir, "..", "..", "venv", "lib", "python2.7", "site-packages", "google_appengine.pth")) as fh:
+        for line in fh:
+            appengine_sdk_path = line.rstrip()
+    google.__path__.append(os.path.join(appengine_sdk_path, "google"))
 
 import google
-google.__path__.append(os.path.join(appengine_sdk_path, "google"))
-
+_google_package_hack()
 from google.appengine.ext import testbed
 from google.appengine.datastore import datastore_stub_util
 
@@ -288,3 +290,42 @@ class SharedTestData(EasyAccessDict):
     @classmethod
     def unload(cls):
         SharedTestData.instance = None
+
+
+class CaptureLogger(object):
+    '''
+    Used to capture the output of logger.  Calling get return a dictionary of level and message.
+    '''
+    RECORD_SEPARATOR = "|"
+    def __init__(self, logger, level=None):
+        self._io = StringIO.StringIO()
+        stream_handler = logging.StreamHandler(self._io)
+
+        if level is None:
+            level = logging.DEBUG
+        stream_handler.setLevel(level)
+        formatter = logging.Formatter("%(levelname)s" + self.RECORD_SEPARATOR + "%(message)s")
+        stream_handler.setFormatter(formatter)
+
+        logger.addHandler(stream_handler)
+
+    def get(self):
+        '''Return a list of level and message logged'''
+        result = []
+        content = self._io.getvalue()
+        if content:
+            for line in content.split(os.linesep):
+                if line:
+                    if self.RECORD_SEPARATOR in line:
+                        level, message = line.split(self.RECORD_SEPARATOR)
+                    else:
+                        level = None
+                        message = line
+
+                    result.append({
+                        "level": level,
+                        "message": message
+                    })
+        self._io.truncate(0)
+
+        return result

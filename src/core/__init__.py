@@ -167,6 +167,62 @@ class ConfigurationStore(object):
         if key not in self.__dict__:
             self.__dict__[key] = default_value
 
+    def __set_logger(self, in_logger=None):
+        '''
+        Set logger from logger passed, or created a new one using LOGGER_CONFIG entry.
+        '''
+
+        # Set or get a logger
+        logger = None
+        if in_logger:
+            logger = in_logger
+        else:
+            # Set the logger config params
+            logger_name = self.DEFAULT_LOGGER_NAME
+            log_level = logging.DEBUG
+            logger_formatter = "%(asctime)-15s: [%(levelname)s] %(message)s [%(filename)s:%(lineno)d]"
+
+            if hasattr(self, 'LOGGER_CONFIG'):
+                cfg = getattr(self, 'LOGGER_CONFIG')
+
+                # Get logger name from config or use the default name
+                if cfg.get('name'):
+                    logger_name = cfg['name']
+
+                # Read level from config or set to DEBUG
+                if 'level' in cfg:
+                    # Translate string level to constant value
+                    config_level = cfg['level']
+                    levels = {
+                        'debug': logging.DEBUG,
+                        'info': logging.INFO,
+                        'warning': logging.WARNING,
+                        'error': logging.ERROR,
+                        'critical': logging.CRITICAL
+                    }
+                    log_level = levels.get(config_level, logging.NOTSET)
+
+                # Read the logging format string
+                if "format" in cfg:
+                    logger_formatter = cfg['format']
+
+            logger = logging.getLogger(logger_name)
+            logger.propagate = False
+            logger.setLevel(log_level)
+
+            # Set format.  Support only STDOUT for now
+            out_handler = logging.StreamHandler()
+            out_handler.setLevel(log_level)
+            formatter = logging.Formatter(logger_formatter)
+            out_handler.setFormatter(formatter)
+            logger.addHandler(out_handler)
+
+        # Set logger name
+        if 'LOGGER_NAME' not in self.__dict__:
+            self.__dict__.update({'LOGGER_NAME': logger.name})
+
+        self._logger = logger
+
     def __init__(self, in_caller_file=None, in_config_file=None, in_local_name=None, logger=None):
         '''
         Loads the json_file provided and, if exists, loads the override file named 'local.json'
@@ -191,7 +247,7 @@ class ConfigurationStore(object):
         self.__set_default_config_value('RUN_MODE', 'dev')
 
         # Set logger
-        self.set_logger(logger)
+        self.__set_logger(logger)
 
     @property
     def config_dir(self):
@@ -204,51 +260,6 @@ class ConfigurationStore(object):
     def logger(self):
         '''Return logger.  Create one if not set'''
         return self._logger
-
-    def set_logger(self, in_logger=None):
-        '''
-        Set logger from logger passed, or created a new one using LOGGER_CONFIG entry.
-        '''
-
-        # Set or get a logger
-        logger = None
-        if in_logger:
-            logger = in_logger
-            self.__dict__.update({'LOGGER_NAME': logger.name})
-        else:
-            if hasattr(self, "LOGGER_NAME"):
-                logger = logging.getLogger(getattr(self, "LOGGER_NAME"))
-            else:
-                logger = logging.getLogger(self.DEFAULT_LOGGER_NAME)
-
-            if hasattr(self, 'LOGGER_CONFIG'):
-                cfg = getattr(self, 'LOGGER_CONFIG')
-                logger = logging.getLogger(cfg['name'])
-                logger.propagate = False
-
-                # Set level
-                if 'level' in cfg:
-                    # Translate string level to constant value
-                    config_level = cfg['level']
-                    levels = {
-                        'debug': logging.DEBUG,
-                        'info': logging.INFO,
-                        'warning': logging.WARNING,
-                        'error': logging.ERROR,
-                        'critical': logging.CRITICAL
-                    }
-                    log_level = levels.get(config_level, logging.NOTSET)
-                    logger.setLevel(log_level)
-
-                # Set format.  Support only STDOUT for now
-                out_handler = logging.StreamHandler()
-                out_handler.setLevel(log_level)
-                if "format" in cfg:
-                    formatter = logging.Formatter(cfg['format'])
-                    out_handler.setFormatter(formatter)
-                logger.addHandler(out_handler)
-
-        self._logger = logger
 
     @classmethod
     def load_json_file(cls, json_file):
@@ -266,7 +277,10 @@ class ConfigurationStore(object):
         '''Setting the class' instance to None forcing the re-initialization.'''
         trace("Unloading ConfigurationStore")
         cls._config_dir = None
-        ConfigurationStore.instance = None
+        if ConfigurationStore.instance:
+            if ConfigurationStore.instance._logger:
+                ConfigurationStore.instance._logger.handlers = []
+            ConfigurationStore.instance = None
 
     #
     # Allow the use of with statement

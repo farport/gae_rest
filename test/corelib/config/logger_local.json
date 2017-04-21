@@ -1,0 +1,7 @@
+{
+    "LOGGER_CONFIG": {
+        "name": "TestLogger",
+        "level": "critical",
+        "format": "%(asctime)-15s:|%(levelname)s|%(message)s|%(filename)s|%(lineno)d"
+    }
+}

@@ -4,6 +4,7 @@ Testing core library
 
 import unittest
 import os
+import logging
 
 import testlib
 from core import ConfigurationStore
@@ -227,6 +228,48 @@ class TestConfigurationStore(unittest.TestCase):
         except AttributeError:
             exceptionRaised = True
         self.assertTrue(exceptionRaised, "Expected AttributeError for conf.LOCAL_INFO")
+
+    def test20_conf_store_logger(self):
+        '''Make sure that CaptureLogger works and that default logger is created correctly by ConfigurationStore'''
+        with ConfigurationStore() as c:
+            logger = c.logger
+        clog = testlib.CaptureLogger(logger)
+
+        # Check name of the logger
+        self.assertEqual(logger.name, ConfigurationStore.DEFAULT_LOGGER_NAME)
+
+        # Make sure logging works
+        logger.debug("This is debug")
+        expected = [{"level": "DEBUG", "message": "This is debug"}]
+        self.assertListEqual(expected, clog.get())
+
+        logger.info("This is info")
+        logger.warn("A warning message")
+        logger.error("A error occurred")
+        expected = [
+            {"level": "INFO", "message": "This is info"},
+            {"level": "WARNING", "message": "A warning message"},
+            {"level": "ERROR", "message": "A error occurred"}
+        ]
+        self.assertListEqual(expected, clog.get())
+
+        logger.critical("Not a good thing...")
+        expected = [{"level": "CRITICAL", "message": "Not a good thing..."}]
+        self.assertListEqual(expected, clog.get())
+
+        ConfigurationStore.unload()
+
+    def test21_conf_store_logger_config(self):
+        '''Make sure that logger is create correctly from config file'''
+        with ConfigurationStore(__file__, in_local_name="logger_local.json") as c:
+            logger = c.logger
+
+        self.assertEqual(logger.name, "TestLogger")
+        self.assertEqual(logger.level, logging.CRITICAL)
+        self.assertEqual(len(logger.handlers), 1)
+
+        handler = logger.handlers[0]
+        self.assertEqual(handler.formatter._fmt, "%(asctime)-15s:|%(levelname)s|%(message)s|%(filename)s|%(lineno)d")
 
 
 if __name__ == '__main__':
