@@ -11,19 +11,15 @@ from __future__ import print_function
 
 import os
 import sys
-import inspect
 import logging
 import json
-
-import time
 import datetime
-import random
-import hashlib
-import base64
 
 
 # ==============================================================================
 # code debug print statement
+import inspect
+
 def trace(*args):
     '''
     core.trace is light weight debug statement to be used for code that imports this package.
@@ -37,7 +33,7 @@ def trace(*args):
     if __debug__:
         if sys.flags.debug:
             filename = os.path.basename(inspect.stack()[1][1])
-            caller = inspect.stack()[1][3]
+            caller = "%s:%s" % (inspect.stack()[1][3], inspect.stack()[1][2])
             # Convert all args into string
             msgs = []
             for arg in args:
@@ -106,6 +102,7 @@ class ConfigurationStore(object):
 
         The @classmethod decoration created only for unit testing purpose
         '''
+        trace("_search_config called with in_caller_file=", in_caller_file, "; in_config_file=", in_config_file, ";in_local_name", in_local_name)
 
         _default_local_name = "local.json"
 
@@ -118,6 +115,7 @@ class ConfigurationStore(object):
                 config_file = os.path.realpath(in_config_file)
                 config_dir = os.path.dirname(config_file)
         else:
+            trace("in_caller_file passed ", in_caller_file)
             if in_caller_file is None:
                 # If in_caller_file is None, the config dir is expected to be located at
                 # `../config` in relation to this file
@@ -126,15 +124,20 @@ class ConfigurationStore(object):
                 # If in_caller_file is passed, the config dir is expected to be located at
                 # `./config` in relation to in_caller_file
                 base_dir = os.path.dirname(in_caller_file)
+            trace("base_dir set to ", base_dir)
 
             config_dir = os.path.join(base_dir, "config")
 
             # Search for the config file
             for file_name in ("dev.json", "qa.json", "uat.json", "prod.json", "app.json"):
                 check_file = os.path.join(config_dir, file_name)
+                trace("searching for the config file ", check_file)
                 if os.path.exists(check_file):
                     config_file = os.path.realpath(check_file)
                     break
+
+        trace("config_file set to:", config_file)
+        trace("config_dir set to:", config_dir)
 
         # Set the local override file
         local_config = None
@@ -146,10 +149,13 @@ class ConfigurationStore(object):
                 local_name = _default_local_name
 
             check_file = os.path.join(config_dir, local_name)
+            trace("searching for the local file ", check_file)
             if os.path.isfile(check_file):
                 local_config = os.path.realpath(check_file)
 
             cls._config_dir = os.path.realpath(config_dir)
+
+            trace("local_config set to:", local_config)
 
         return config_file, local_config
 
@@ -175,6 +181,7 @@ class ConfigurationStore(object):
         # Set or get a logger
         logger = None
         if in_logger:
+            trace("Logger passed")
             logger = in_logger
         else:
             # Set the logger config params
@@ -183,11 +190,13 @@ class ConfigurationStore(object):
             logger_formatter = "%(asctime)-15s: [%(levelname)s] %(message)s [%(filename)s:%(lineno)d]"
 
             if hasattr(self, 'LOGGER_CONFIG'):
+                trace("Reading logger info from config")
                 cfg = getattr(self, 'LOGGER_CONFIG')
 
                 # Get logger name from config or use the default name
                 if cfg.get('name'):
                     logger_name = cfg['name']
+                    trace("Logger name from config:", logger_name)
 
                 # Read level from config or set to DEBUG
                 if 'level' in cfg:
@@ -201,9 +210,11 @@ class ConfigurationStore(object):
                         'critical': logging.CRITICAL
                     }
                     log_level = levels.get(config_level, logging.NOTSET)
+                    trace("Logger level from config:", config_level, "; value:", log_level)
 
                 # Read the logging format string
                 if "format" in cfg:
+                    trace("Logger format from config:", format)
                     logger_formatter = cfg['format']
 
             logger = logging.getLogger(logger_name)
@@ -278,8 +289,9 @@ class ConfigurationStore(object):
         trace("Unloading ConfigurationStore")
         cls._config_dir = None
         if ConfigurationStore.instance:
-            if ConfigurationStore.instance._logger:
-                ConfigurationStore.instance._logger.handlers = []
+            if ConfigurationStore.instance._logger: # pylint: disable=W0212
+                trace("Unloading ConfigurationStore loggers")
+                ConfigurationStore.instance._logger.handlers = [] # pylint: disable=W0212
             ConfigurationStore.instance = None
 
     #
