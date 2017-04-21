@@ -11,17 +11,24 @@ import testlib
 TRUNNER = testlib.TestRunner()
 
 
-def getTaskFromCurrentPackage(task_name):
-    return 'corelib.%s' % task_name
+def getTasksFromCurrentPackage(*tasks):
+    res = []
+    for task in tasks:
+        res.append('corelib.%s' % task)
+    return res
 
 
 @task
-def configuration_store():
+def test_configuration_store():
     TRUNNER.add(tests.TestConfigurationStore)
+
+@task
+def test_testlib():
+    TRUNNER.add(tests.TestLibTests)
 
 # @needs([getTaskFromCurrentPackage('configuration_store')])
 @task
-@needs([getTaskFromCurrentPackage('configuration_store')])
+@needs(getTasksFromCurrentPackage('test_testlib', 'test_configuration_store'))
 def all():
     print("All tasks ran")
 

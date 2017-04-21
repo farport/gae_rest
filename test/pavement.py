@@ -24,7 +24,7 @@ def default():
     Note: TestRunner is a Singleton
     '''
     trunner = TestRunner()
-    trunner.run_added()
+    trunner.run_added(failfast=True)
     print("Test completed")
 
 

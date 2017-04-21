@@ -8,9 +8,6 @@ import testlib
 from google.appengine.ext import ndb
 from models import NdbUtilMixIn
 
-import pprint
-
-
 # -------------------------------------------------------
 # Define basic model.  Testing a deep nesting model
 class Country(ndb.Model):
@@ -52,7 +49,6 @@ class TestConfigurationStore(unittest.TestCase):
 
         res_dict = person.json_dict()
 
-        self.assertEqual(data.created_on, res_dict.get("created_on"))
         self.assertEqual(res_dict, data)
 
 

@@ -75,13 +75,15 @@ class TestRunner(object):
             cls._log_test(test_case, None)
 
         runner = unittest.TextTestRunner(verbosity=verbosity, failfast=failfast)
-        runner.run(unittest.makeSuite(test_case))
+        return runner.run(unittest.makeSuite(test_case)).wasSuccessful()
 
     @classmethod
     def run_all(cls, test_cases, verbosity=2, failfast=True):
         '''Pass a list of test cases and call .run method'''
         for tcase in test_cases:
-            cls.run(tcase, verbosity, failfast)
+            run_ok = cls.run(tcase, verbosity, failfast)
+            if failfast and not run_ok:
+                break
 
     def __init__(self):
         self._tcases = []
@@ -197,22 +199,6 @@ class AppEngineTestbed(object):
             AppEngineTestbed.instance = None
 
 
-
-'''
-def run_tests(filename, test_pack, verbosity=2, failfast=True):
-    datastore_mode = test_pack.get('datastore_mode')
-    tests = test_pack['tests']
-
-    testSuite = unittest.TestSuite()
-    for test_case in tests:
-        testSuite.addTest(unittest.makeSuite(test_case))
-
-    testbed = AppEngineTestbed(datastore_mode, show_message=True)
-    testRunner = unittest.TextTestRunner(verbosity=verbosity, failfast=failfast)
-    testRunner.run(testSuite)
-    testbed.unload()
-'''
-
 # DATA RELATED
 class JsonDataReader(object):
     '''
@@ -229,28 +215,74 @@ class JsonDataReader(object):
 
     def get(self, *paths):
         '''
-        Return the json data
+        Return the json data if file ends with json.  Otherwise, return the content.
         '''
         data_file = os.path.join(self._data_dir, *paths)
         with open(data_file, "r") as _:
-            data = json.load(_)
-        return DictToProperty(data)
+            if data_file.endswith(".json"):
+                data = json.load(_)
+                return EasyAccessDict(data)
+            else:
+                return _.read()
 
 
-class DictToProperty(dict):
+class EasyAccessDict(dict):
     def __init__(self, *args, **kwargs):
-        super(DictToProperty, self).__init__(*args, **kwargs)
-        protected = set(dir(dict))
+        super(EasyAccessDict, self).__init__(*args, **kwargs)
+        self._protected_properties = set(dir(dict))
 
-        # Prevent the override of the dictionaries methods
-        for key in self:
-            if key in protected:
-                raise ValueError("'%s' is a protected attribute and cannot be set" % key)
+    def _get_elem(self, mode, *keys):
+        '''
+        Returns a tuple of penultimate element and the final key in JSON as specified using input keys
+        array that defines the path.  If any element of the path does not exists, create it.
+        The return tuple allow the final element to be set or deleted
+        mode can be `get` or `set`
+        '''
+        key_list = list(keys)
+        last_key = key_list.pop()
+        elem = self
 
-        self.__dict__ = self
+        for key in key_list:
+            if key not in elem:
+                if mode == 'get':
+                    return None, None
+                else:
+                    elem[key] = {}
+            elem = elem[key]
+
+        return elem, last_key
+
+    def get(self, *keys):
+        '''Return element given the path'''
+        if keys:
+            elem, key = self._get_elem('get', *keys)
+            if elem:
+                if key in elem:
+                    return elem[key]
+
+    def set(self, value, *keys):
+        '''Set the value for the given path'''
+        elem, key = self._get_elem('set', *keys)
+        elem[key] = value
+
+    def delete(self, *keys):
+        '''Delete the key for the given path'''
+        elem, key = self._get_elem('get', *keys)
+        if elem:
+            del elem[key]
+
+    def json_text(self, *keys, **kwargs):
+        '''Return the json text'''
+        if keys:
+            json_data = self.get(*keys)
+        else:
+            json_data = self
+        if 'indent' not in kwargs:
+            kwargs['indent'] = 4
+        return json.dumps(json_data, **kwargs)
 
 
-class SharedTestData(DictToProperty):
+class SharedTestData(EasyAccessDict):
     __metaclass__ = Singleton
 
     @classmethod

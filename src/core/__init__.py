@@ -88,6 +88,8 @@ class ConfigurationStore(object):
     as the configuration file provided, named 'local.json'.  This is to allow local development
     override.
     '''
+    DEFAULT_LOGGER_NAME = "ConfigurationStoreLogger"
+
     __metaclass__ = Singleton
     _logger = None
 
@@ -174,9 +176,6 @@ class ConfigurationStore(object):
         relation to the file passed.  Otherwise, `config` dir should be located at `../config`
         of location of `core.__init__.py` file.
         '''
-        if logger:
-            self._logger = logger
-
         # Search for configuration file
         config_file, local_config = self._search_config(in_caller_file, in_config_file, in_local_name)
 
@@ -192,7 +191,7 @@ class ConfigurationStore(object):
         self.__set_default_config_value('RUN_MODE', 'dev')
 
         # Set logger
-        self.set_logger()
+        self.set_logger(logger)
 
     @property
     def config_dir(self):
@@ -219,6 +218,8 @@ class ConfigurationStore(object):
         else:
             if hasattr(self, "LOGGER_NAME"):
                 logger = logging.getLogger(getattr(self, "LOGGER_NAME"))
+            else:
+                logger = logging.getLogger(self.DEFAULT_LOGGER_NAME)
 
             if hasattr(self, 'LOGGER_CONFIG'):
                 cfg = getattr(self, 'LOGGER_CONFIG')

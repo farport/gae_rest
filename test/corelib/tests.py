@@ -9,6 +9,102 @@ import testlib
 from core import ConfigurationStore
 
 SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
+READER = testlib.JsonDataReader(__file__)
+
+class TestLibTests(unittest.TestCase):
+    '''
+    Test for testlib
+
+    Note: although the test focus on EasyAccessDict, JsonDataReader is also being tested
+    '''
+    def setUp(self):
+        self.data = READER.get("test.json")
+
+    def test01_easy_dict(self):
+        '''
+        Test that EasyAccessDict can be accessed as a dict and that content is as expected.
+        Also test that JsonDataReader returns the right data
+        '''
+        # This should be exact replica of what's in test.sjon
+        ref_dict = {
+            "level": 1,
+            "ref": "level 1",
+            "level2": {
+                "level": 2,
+                "ref": "level 2",
+                "level3": {
+                    "level": 3,
+                    "ref": "level 3",
+                    "content": {
+                        "level": 4,
+                        "ref": "level 4"
+                    }
+                }
+            }
+        }
+        self.assertDictEqual(self.data, ref_dict)
+
+    def test02_easy_dict_get(self):
+        '''Make sure multi-level get works'''
+        self.assertEqual(self.data.get("level2", "ref"), "level 2")
+        self.assertEqual(self.data["level2"]["ref"], "level 2")
+
+        self.assertEqual(self.data.get("level2", "level3", "ref"), "level 3")
+        self.assertEqual(self.data["level2"]["level3"]["ref"], "level 3")
+
+        self.assertEqual(self.data.get("level2", "level3", "content", "level"), 4)
+        self.assertEqual(self.data["level2"]["level3"]["content"]["level"], 4)
+
+    def test03_easy_dict_get_error(self):
+        '''Make sure error are consistant.  Get will not raise the error but return None'''
+        self.assertIsNone(self.data.get("level2", "level3", "wrong_key"))
+        try:
+            _ = self.data["level2"]["level3"]["wrong_key"]
+        except StandardError as ex:
+            self.assertIsInstance(ex, KeyError)
+
+        self.assertIsNone(self.data.get("level2", "ref", "wrong_key"))
+        try:
+            _ = self.data["level2"]["ref"]["wrong_key"]
+        except StandardError as ex:
+            self.assertIsInstance(ex, TypeError)
+
+    def test04_easy_dict_set(self):
+        '''Make sure multi-level set works'''
+        attrs = ("level2", "content")
+        s = "level 2 content"
+
+        # level2.content should not exists
+        self.assertIsNone(self.data.get(*attrs))
+        try:
+            _ = self.data["level2"]["content"]
+        except StandardError as ex:
+            self.assertIsInstance(ex, KeyError)
+
+        # Set and check for level2.content
+        self.data.set(s, *attrs)
+        self.assertEqual(self.data.get(*attrs), s)
+        self.assertEqual(self.data["level2"]["content"], s)
+
+    def test05_easy_dict_delete(self):
+        '''Make sure that delete works'''
+        attrs = ("level2", "level3", "content")
+
+        # level2.level3.content should exists
+        self.assertIsNotNone(self.data.get(*attrs))
+
+        # Set and check for level2.content
+        self.data.delete(*attrs)
+        self.assertIsNone(self.data.get(*attrs))
+
+    def test06_easy_dict_json_text(self):
+        '''Make sure that json output works as expected,  also test that JsonDataReader returns non json data'''
+        expected_all = READER.get("test_json_text_all.txt")
+        self.assertEqual(self.data.json_text(indent=None), expected_all)
+
+        expected_level3 = READER.get("test_json_text_level3.txt")
+        self.assertEqual(self.data.json_text("level2", "level3", indent=None), expected_level3)
+
 
 
 class TestConfigurationStore(unittest.TestCase):
@@ -131,6 +227,7 @@ class TestConfigurationStore(unittest.TestCase):
         except AttributeError:
             exceptionRaised = True
         self.assertTrue(exceptionRaised, "Expected AttributeError for conf.LOCAL_INFO")
+
 
 if __name__ == '__main__':
     unittest.main(verbosity=2, failfast=True)

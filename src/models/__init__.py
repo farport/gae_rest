@@ -76,6 +76,45 @@ class ModelParser(object):
     _classname_property = None
     _skip_update_columns = set([])
 
+    @classmethod
+    def decode_ndb_key(cls, in_key):
+        '''Convert the input key into ndb.Key, ignoring any exception decoding urlsafe string.'''
+        if in_key is None:
+            return None
+        elif isinstance(in_key, ndb.Key):
+            res = in_key
+        else:
+            # Fix per: https://github.com/googlecloudplatform/datastore-ndb-python/issues/143
+            try:
+                res = ndb.Key(urlsafe=in_key)
+            except ProtocolBufferDecodeError:
+                pass
+            except StandardError as e:
+                if e.__class__.__name__ == 'ProtocolBufferDecodeError':
+                    pass
+                else:
+                    raise
+        return res
+
+    @classmethod
+    def check_if_property_exists(cls, properties, class_to_check=None):
+        '''
+        Check if properties passed indeed exists.  Used during init
+        '''
+        if properties is None:
+            return
+
+        if class_to_check is None:
+            class_to_check = cls
+
+        if isinstance(properties, basestring):
+            if properties not in class_to_check._properties:
+                raise NdbModelInitializationError("%s is not a valid property in %s" % (properties, class_to_check._class_name()))
+        else:
+            for prop_name in properties:
+                if prop_name not in class_to_check._properties:
+                    raise NdbModelInitializationError("%s is not a valid property in %s" % (prop_name, class_to_check._class_name()))
+
     def __init__(self, model):
         self._model = model
 
@@ -140,27 +179,18 @@ class ModelParser(object):
         if isinstance(prop, ndb.DateProperty):
             result = datetime.datetime.strptime(value, "%Y-%m-%d")
         elif isinstance(prop, ndb.DateTimeProperty):
-            # result = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%fZ")
+            # this is equivalent of the .isoformat
             result = datetime.datetime.strptime(value, "%Y-%m-%dT%H:%M:%S.%f")
         elif isinstance(prop, ndb.KeyProperty):
             # Only attempt to convert to key if input value is a string
             if isinstance(value, basestring):
-                # Fix per: https://github.com/googlecloudplatform/datastore-ndb-python/issues/143
-                try:
-                    result = ndb.Key(urlsafe=value)
-                except ProtocolBufferDecodeError:
-                    pass
-                except StandardError as e:
-                    if e.__class__.__name__ == 'ProtocolBufferDecodeError':
-                        pass
-                    else:
-                        raise e
+                result = self.decode_ndb_key(value)
         return result
 
-    def dict_for_model(self, in_dict, skip_null_value=False):
+    def set_dict_for_model(self, in_dict, skip_null_value=False):
         '''
-        Return dictionary object to be used for the model.  This method create a shallow copy of
-        input dictionary as not to alter the input dictionary.
+        Return dictionary object to be used for creating or updating the model.  This method create a
+        shallow copy of input dictionary as not to alter the input dictionary.
         '''
         res_dict = copy.deepcopy(in_dict)
         self._iter_dict(res_dict, cv_val=self.value_for_property, skip_null_value=skip_null_value)
@@ -188,19 +218,21 @@ class ModelParser(object):
             if not isinstance(value, (datetime.date, datetime.datetime)):
                 raise ValueError("Property %s expected value type of date or datetime but got '%s'" % (prop, value))
             result = value.isoformat()
-            # result = value.strftime('%Y-%m-%d')
         elif isinstance(prop, ndb.KeyProperty):
             if not isinstance(value, ndb.KeyProperty):
                 raise ValueError("Expected KeyProperty for %s but got '%s'" % (prop, value))
             return value.urlsafe()
-        # print("### text_from_property: %s=%s [type: %s]" % (prop, result, type(result)))
 
         return result
 
-    def dict_from_model(self, skip_null_value=False):
+    def get_dict_from_model(self, skip_null_value=False):
+        '''
+        Format the dictionary from model.to_dict()
+        '''
         in_dict = self._model.to_dict()
         self._iter_dict(in_dict, cv_val=self.text_from_property, skip_null_value=skip_null_value)
         return in_dict
+
 
 class NdbUtilMixIn(object):
     '''
@@ -236,21 +268,6 @@ class NdbUtilMixIn(object):
             self._parser = ModelParser(self)
         else:
             self._parser = self._mode_parser_class(self)
-
-    def __check_if_property_exists(self, properties):
-        '''
-        Check if properties passed indeed exists.  Used during init
-        '''
-        if properties is None:
-            return
-
-        if isinstance(properties, basestring):
-            if properties not in self._properties:
-                raise NdbModelInitializationError("%s is not a valid property in %s" % (properties, self._class_name()))
-        else:
-            for prop_name in properties:
-                if prop_name not in self._properties:
-                    raise NdbModelInitializationError("%s is not a valid property in %s" % (prop_name, self._class_name()))
 
     def __init__(self, *args, **kwargs):
         # This method should only be used with ndb.Model
@@ -345,14 +362,15 @@ class NdbUtilMixIn(object):
         return self.__update_model(in_dict, insert_mode=False, skip_null_value=skip_null_value)
 
     def json_dict(self, skip_null_value=False):
-        return self._parser.dict_from_model(skip_null_value)
+        '''Return formatted dictionary to be converted to JSON'''
+        return self._parser.get_dict_from_model(skip_null_value)
 
     @classmethod
-    def __raise_if_not_same_class(cls, model, in_key=None):
+    def __raise_if_not_same_class(cls, model, in_key_to_display_for_error_message=None):
         '''Raise error if model is not the class'''
         if not isinstance(model, cls):
-            if in_key:
-                message = "Expected model to be '%s' but key '%s' points to model '%s'" % (cls._class_name(), in_key, model.__class__.__name__)
+            if in_key_to_display_for_error_message:
+                message = "Expected model to be '%s' but key '%s' points to model '%s'" % (cls._class_name(), in_key_to_display_for_error_message, model.__class__.__name__)
             else:
                 message = "Expected model to be '%s' but got '%s'" % (cls._class_name(), model.__class__.__name__)
             raise NdbModelMismatchError(message)
@@ -384,19 +402,9 @@ class NdbUtilMixIn(object):
             creation_kwargs["parent"] = in_dict.get(cls._parent_property)
 
         model = cls(**creation_kwargs)
-        in_dict = model._parser.dict_for_model(in_dict, skip_null_value=skip_null_value)
+        in_dict = model._parser.set_dict_for_model(in_dict, skip_null_value=skip_null_value)
 
         return model.__update_model(in_dict, skip_null_value=skip_null_value)
-
-    @classmethod
-    def __translate_key(cls, in_key):
-        if in_key is None:
-            return None
-        elif isinstance(in_key, ndb.Key):
-            res = in_key
-        else:
-            res = ndb.Key(urlsafe=in_key)
-        return res
 
     @classmethod
     def update_from_dict(cls, in_dict, parent=None, skip_null_value=False):
@@ -418,7 +426,8 @@ class NdbUtilMixIn(object):
             key_provided = None
             id_provided = in_dict.get(cls._identity_property)
         else:
-            if key_defined or key_defined:
+            # Create error message as key or id is either not set or not populated
+            if key_defined or id_defined:
                 attrs = []
 
                 if key_defined:
@@ -443,9 +452,9 @@ class NdbUtilMixIn(object):
                 parent_provided = in_dict.get(cls._parent_property)
             else:
                 parent_provided = None
-            key = ndb.Key(cls, id_provided, parent=cls.__translate_key(parent_provided))
+            key = ndb.Key(cls, id_provided, parent=ModelParser.decode_ndb_key(parent_provided))
         elif key_provided is not None:
-            key = cls.__translate_key(key_provided)
+            key = ModelParser.decode_ndb_key(key_provided)
 
         model = key.get()
         if model is None:
@@ -456,19 +465,16 @@ class NdbUtilMixIn(object):
         return model.__update_model(in_dict, insert_mode=False, skip_null_value=skip_null_value)
 
     @classmethod
-    def get_by_urlsafe(cls, urlsafe_id):
+    def get_by_urlsafe(cls, urlsafe_key):
         '''Get an entity by key in urlsafe format.'''
-        try:
-            key = ndb.Key(urlsafe=urlsafe_id)
-        except Exception, e:
-            if e.__class__.__name__ == 'ProtocolBufferDecodeError':
-                return None
-            else:
-                raise
+
+        key = ModelParser.decode_ndb_key(urlsafe_key)
+        if key is None:
+            return None
 
         entry = key.get()
         if entry:
-            cls.__raise_if_not_same_class(entry, urlsafe_id)
+            cls.__raise_if_not_same_class(entry, urlsafe_key)
             return entry
         else:
             return None

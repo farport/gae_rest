@@ -1,0 +1,16 @@
+{
+    "level": 1,
+    "ref": "level 1",
+    "level2": {
+        "level": 2,
+        "ref": "level 2",
+        "level3": {
+            "level": 3,
+            "ref": "level 3",
+            "content": {
+                "level": 4,
+                "ref": "level 4"
+            }
+        }
+    }
+}
