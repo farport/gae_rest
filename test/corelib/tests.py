@@ -237,12 +237,14 @@ class TestConfigurationStore(unittest.TestCase):
 
         # Check name of the logger
         self.assertEqual(logger.name, ConfigurationStore.DEFAULT_LOGGER_NAME)
+        self.assertEqual(logger.level, logging.INFO)
 
-        # Make sure logging works
+        # Level is INFO so debug should't log
         logger.debug("This is debug")
-        expected = [{"level": "DEBUG", "message": "This is debug"}]
+        expected = []
         self.assertListEqual(expected, clog.get())
 
+        # Make sure logging works
         logger.info("This is info")
         logger.warn("A warning message")
         logger.error("A error occurred")

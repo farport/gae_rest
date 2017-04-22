@@ -1,0 +1,22 @@
+{
+    "first_name": "Jerry",
+    "last_name": "Martin",
+    "age": 29,
+    "balance": 5,
+    "created_on": "2017-03-15T15:56:38.234320",
+    "address": {
+        "lines": [
+            "Via Santa Maria di Costantinopoli, 29"
+        ],
+        "city_country": {
+            "city": "San Benedetto Po",
+            "region": "MN",
+            "post_code": "46027",
+            "country": {
+                "code": "UK",
+                "country": "Italy",
+                "residence_since": "1995-06-25"
+            }
+        }
+    }
+}

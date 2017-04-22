@@ -13,7 +13,7 @@ TRUNNER = testlib.TestRunner()
 
 @task
 def simple():
-    TRUNNER.add(test_simple.TestConfigurationStore)
+    TRUNNER.add(test_simple.SimpleNdbNestedTest)
 
 
 @task

@@ -285,10 +285,12 @@ class EasyAccessDict(dict):
 
 
 class SharedTestData(EasyAccessDict):
+    '''Data that can be share between tests'''
     __metaclass__ = Singleton
 
     @classmethod
     def unload(cls):
+        '''Unload and clear the shared data'''
         SharedTestData.instance = None
 
 

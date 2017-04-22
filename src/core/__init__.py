@@ -186,7 +186,7 @@ class ConfigurationStore(object):
         else:
             # Set the logger config params
             logger_name = self.DEFAULT_LOGGER_NAME
-            log_level = logging.DEBUG
+            log_level = logging.INFO
             logger_formatter = "%(asctime)-15s: [%(levelname)s] %(message)s [%(filename)s:%(lineno)d]"
 
             if hasattr(self, 'LOGGER_CONFIG'):
@@ -216,6 +216,10 @@ class ConfigurationStore(object):
                 if "format" in cfg:
                     trace("Logger format from config:", format)
                     logger_formatter = cfg['format']
+
+            # Force debug if __debug__ is set
+            if sys.flags.debug:
+                log_level = logging.DEBUG
 
             logger = logging.getLogger(logger_name)
             logger.propagate = False

@@ -1,0 +1,12 @@
+{
+    "first_name": "Sara",
+    "last_name": "Gomez",
+    "address": {
+        "city_country": {
+            "city": "Marshall",
+            "country": {
+                "code": "US"
+            }
+        }
+    }
+}

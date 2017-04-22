@@ -1,0 +1,23 @@
+{
+    "first_name": "Betty",
+    "last_name": "Miller",
+    "age": 43,
+    "balance": 10.11,
+    "created_on": "2017-04-20T18:56:39.075310",
+    "address": {
+        "lines": [
+            "Via Nazionale, 1",
+            "Apt 10"
+        ],
+        "city_country": {
+            "city": "Rome",
+            "region": "RM",
+            "post_code": "00151",
+            "country": {
+                "code": "IT",
+                "country": "Italy",
+                "residence_since": "1990-01-17"
+            }
+        }
+    }
+}

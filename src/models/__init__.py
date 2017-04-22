@@ -10,6 +10,9 @@ from google.appengine.api.datastore_errors import Error, BadValueError
 
 from core import ConfigurationStore
 
+with ConfigurationStore() as c:
+    LOGGER = c.logger
+
 # ==============================================================================
 # Define Exceptions
 #
@@ -22,31 +25,45 @@ class NdbModelMismatchError(NdbModelError):
     pass
 
 class NdbModelInitializationError(NdbModelError):
-    pass
-
-class UnAuthorizedException(NdbModelError):
+    '''Error while trying to initialize a model with NdbUtilMixIn'''
     pass
 
 class DuplicateEntryError(NdbModelError):
+    '''Exception due to _unique_properties'''
     pass
 
 class InvalidValueError(NdbModelError, BadValueError):
+    '''Generic ValueError'''
     pass
 
-class UninitializedRequiredPropertyError(InvalidValueError):
+class InvalidKeyError(InvalidValueError):
+    '''key passed is not a valid ndb.Key'''
+    def __init__(self, in_key=None, message=None):
+        if message is None:
+            if in_key is None:
+                message = "A 'None' value passed as key"
+            else:
+                message = "Key '%s' of type '%s' is not a valid key" % (in_key, type(in_key))
+        super(InvalidKeyError, self).__init__(message)
+
+class MissingRequiredPropertyError(InvalidValueError):
+    '''Exception due to _required_properties'''
     def __init__(self, *prop_names):
         if len(prop_names) == 1:
-            message = "Required property '%s' is not initialized." % prop_names
+            message = "Required property '%s' is not set." % prop_names
         elif len(prop_names) > 1:
-            message = "Required properties '%s' are not initialized." % ",".join(["'%s'" % x for x in prop_names])
+            message = "Required properties '%s' are not set." % ",".join(["'%s'" % x for x in prop_names])
         else:
             raise NdbModelError("UninitializedRequiredPropertyError error received no property name")
-        super(UninitializedRequiredPropertyError, self).__init__(message)
-
+        super(MissingRequiredPropertyError, self).__init__(message)
 
 class PutMethodDisabledError(NdbModelError):
-    def __init__(self, object_classname, alternative_put_method_name='.save'):
-        message = "%s object must be persisted using the %s method" % (object_classname, alternative_put_method_name)
+    '''Raised when put method of a ndb.Model is disabled intentionally (StubModel)'''
+    def __init__(self, object_classname, alternative_put_method_name=None):
+        if object_classname:
+            message = "%s object must be persisted using the %s method" % (object_classname, alternative_put_method_name)
+        else:
+            message = "%s object cannot be saved"
         super(PutMethodDisabledError, self).__init__(message)
 
 
@@ -56,64 +73,50 @@ class PutMethodDisabledError(NdbModelError):
 #
 class ModelParser(object):
     '''
-    Class Variables
+    This class focus on converting dictionary to and from a ndb model.  It takes care
+    of conversion via the following 2 method that is designed to be overriden:
 
-    _identity_property:   Set the name of property that should be set as ID of the model.
-                          Support a single property only so no composite key.
+        * value_for_property
+        * text_from_property
 
-    _parent_property:     When returning identity_property, generate assoicated parent key
+    By default, following conversions are built in:
 
-    _key_property:        Attribute name for urlsafe version of key
-
-    _classname_property:  Return the name of the class in the given attribute
-
-    _skip_update_columns: Columns that shouldn't be updated by create/update_from_dict
+        * DateProperty to string
+        * DateTimeProperty to string
+        * KeyProperty to base64 string
     '''
 
-    _identity_property = None
-    _parent_property = None
-    _key_property = None
-    _classname_property = None
-    _skip_update_columns = set([])
-
     @classmethod
-    def decode_ndb_key(cls, in_key):
-        '''Convert the input key into ndb.Key, ignoring any exception decoding urlsafe string.'''
+    def decode_ndb_key(cls, in_key, raise_exception=False):
+        '''
+        Convert the input key into ndb.Key, ignoring any exception decoding urlsafe string.
+
+        raises InvalidKeyError if raise_exception set to True.
+        '''
         if in_key is None:
-            return None
+            if raise_exception:
+                raise InvalidKeyError(in_key)
+            res = None
         elif isinstance(in_key, ndb.Key):
             res = in_key
-        else:
+        elif isinstance(in_key, basestring):
             # Fix per: https://github.com/googlecloudplatform/datastore-ndb-python/issues/143
             try:
                 res = ndb.Key(urlsafe=in_key)
             except ProtocolBufferDecodeError:
-                pass
+                if raise_exception:
+                    raise InvalidKeyError(in_key)
             except StandardError as e:
                 if e.__class__.__name__ == 'ProtocolBufferDecodeError':
-                    pass
+                    if raise_exception:
+                        raise InvalidKeyError(in_key)
                 else:
                     raise
-        return res
-
-    @classmethod
-    def check_if_property_exists(cls, properties, class_to_check=None):
-        '''
-        Check if properties passed indeed exists.  Used during init
-        '''
-        if properties is None:
-            return
-
-        if class_to_check is None:
-            class_to_check = cls
-
-        if isinstance(properties, basestring):
-            if properties not in class_to_check._properties:
-                raise NdbModelInitializationError("%s is not a valid property in %s" % (properties, class_to_check._class_name()))
         else:
-            for prop_name in properties:
-                if prop_name not in class_to_check._properties:
-                    raise NdbModelInitializationError("%s is not a valid property in %s" % (prop_name, class_to_check._class_name()))
+            if raise_exception:
+                raise InvalidKeyError(in_key)
+
+        return res
 
     def __init__(self, model):
         self._model = model
@@ -126,7 +129,7 @@ class ModelParser(object):
             raise TypeError('%s is not a property of %s' % (name, model._class_name()))
         return prop
 
-    def _iter_dict(self, in_dict, cv_val, model=None, skip_null_value=False, level=None):
+    def _iter_dict(self, in_dict, cv_val, remove_null_entries=False, model=None, level=None):
         '''
         Loop through the dictionary and set convert the value when needed
         '''
@@ -139,10 +142,17 @@ class ModelParser(object):
         else:
             level += 1
 
+        del_entries = []
+
         for key, value in in_dict.iteritems():
             # Skip null values
-            if skip_null_value and value is None:
+            if value is None:
+                if remove_null_entries:
+                    LOGGER.debug("ModelParser._iter_dict: %s queued to be deleted", key)
+                    del_entries.append({"key": key, "in_dict": in_dict})
                 continue
+
+            LOGGER.debug("ModelParser._iter_dict: %s=%s (%s)[%d]", key, value, type(value), level)
 
             # Process the property, recursively if StructuredProperty found
             prop = self._get_property_from_model_by_name(model, key)
@@ -157,9 +167,19 @@ class ModelParser(object):
                         prop._set_value(model, {})
                         struct_model = prop._get_value(model)
                     self._iter_dict(value, cv_val, model=struct_model, level=level)
+                else:
+                    raise InvalidValueError("ndb.StructuredProperty '%s' expect a dict as value but got '%s' of type '%s'" % (prop, value, type(value)))
             else:
                 # Update the entry
                 in_dict[key] = cv_val(prop, value)
+
+        # Delete null entries if needed
+        if remove_null_entries:
+            for entry in del_entries:
+                in_dict = entry['in_dict']
+                key = entry['key']
+                LOGGER.debug("ModelParser._iter_dict: deleting %s", key)
+                del in_dict[key]
 
     def value_for_property(self, prop, value):
         '''
@@ -185,15 +205,17 @@ class ModelParser(object):
             # Only attempt to convert to key if input value is a string
             if isinstance(value, basestring):
                 result = self.decode_ndb_key(value)
+
+        LOGGER.debug("ModelParser.value_for_property: prop=%s; value=%s; result=%s", prop, value, result)
         return result
 
-    def set_dict_for_model(self, in_dict, skip_null_value=False):
+    def set_dict_for_model(self, in_dict, remove_null_entries=False):
         '''
         Return dictionary object to be used for creating or updating the model.  This method create a
         shallow copy of input dictionary as not to alter the input dictionary.
         '''
         res_dict = copy.deepcopy(in_dict)
-        self._iter_dict(res_dict, cv_val=self.value_for_property, skip_null_value=skip_null_value)
+        self._iter_dict(res_dict, cv_val=self.value_for_property, remove_null_entries=remove_null_entries)
         return res_dict
 
     def text_from_property(self, prop, value):
@@ -223,14 +245,15 @@ class ModelParser(object):
                 raise ValueError("Expected KeyProperty for %s but got '%s'" % (prop, value))
             return value.urlsafe()
 
+        LOGGER.debug("ModelParser.text_from_property: prop=%s; value=%s; result=%s", prop, value, result)
         return result
 
-    def get_dict_from_model(self, skip_null_value=False):
+    def get_dict_from_model(self, remove_null_entries=False):
         '''
         Format the dictionary from model.to_dict()
         '''
         in_dict = self._model.to_dict()
-        self._iter_dict(in_dict, cv_val=self.text_from_property, skip_null_value=skip_null_value)
+        self._iter_dict(in_dict, cv_val=self.text_from_property, remove_null_entries=remove_null_entries)
         return in_dict
 
 
@@ -250,6 +273,8 @@ class NdbUtilMixIn(object):
 
     NOTE: this must be first parent of multiple inherentance to ensure
           that NdbUtilMixIn.__init__() is called.
+
+    ToDo: Implement .check_unique_properties using a unique key ndb.Model
     '''
 
     def __init_class_variables(self):
@@ -278,11 +303,6 @@ class NdbUtilMixIn(object):
 
         super(NdbUtilMixIn, self).__init__(*args, **kwargs)
 
-    def __update_model(self, in_dict, insert_mode=False, skip_null_value=False):
-        '''Wrapper around .populate removing columns that shouldn't be updated'''
-        self.populate(**in_dict)
-        return self
-
     def __raise_dup_unique_properties(self, key):
         entry = key.get(use_cache=False)
 
@@ -300,37 +320,13 @@ class NdbUtilMixIn(object):
 
         Exceptions: DuplicateEntryError
         '''
-        if self._unique_properties is None:
-            return
-
-        # Generate query object searching for existing records from datastore
-        model = self.__class__
-        search_args = []
-        for col in self._unique_properties:
-            model_prop = getattr(model, col)
-            self_prop = getattr(self, col)
-            search_args.append(model_prop == self_prop)
-        qry = self.query(*search_args)
-
-        # Check if insert or update
-        if insert_mode is None:
-            insert_mode = self.key is None
-
-        # Check if entries exists, avoid using cache
-        for key in qry.iter(keys_only=True):
-            if insert_mode:
-                # If adding
-                self.__raise_dup_unique_properties(key)
-            else:
-                # If update
-                if key == self.key:
-                    continue
-                else:
-                    self.__raise_dup_unique_properties(key)
+        raise NotImplementedError(".check_unique_properties is not yet implemented")
 
     def check_required_properties(self):
         '''
         Check and ensure that columns defined in the _required_properties are not None
+
+        Exception: MissingRequiredPropertyError
         '''
         if self._required_properties is None:
             return
@@ -340,7 +336,7 @@ class NdbUtilMixIn(object):
             if getattr(self, prop) is None:
                 missing_props.append(prop)
         if missing_props:
-            raise UninitializedRequiredPropertyError(*missing_props)
+            raise MissingRequiredPropertyError(*missing_props)
 
     def check_parent_kind(self, *kinds):
         '''
@@ -358,111 +354,99 @@ class NdbUtilMixIn(object):
             elif parent_key.kind() not in expected_kinds:
                 raise ValueError("%s requires a parent of kind(s) %s but got %s" % (model_key.kind(), ','.join(kinds), parent_key.kind()))
 
-    def set_from_dict(self, in_dict, skip_null_value=False):
-        return self.__update_model(in_dict, insert_mode=False, skip_null_value=skip_null_value)
-
     def json_dict(self, skip_null_value=False):
         '''Return formatted dictionary to be converted to JSON'''
-        return self._parser.get_dict_from_model(skip_null_value)
+        return self._parser.get_dict_from_model(remove_null_entries=skip_null_value)
 
     @classmethod
-    def __raise_if_not_same_class(cls, model, in_key_to_display_for_error_message=None):
+    def __raise_if_not_same_class(cls, model, key_for_error_message=None):
         '''Raise error if model is not the class'''
         if not isinstance(model, cls):
-            if in_key_to_display_for_error_message:
-                message = "Expected model to be '%s' but key '%s' points to model '%s'" % (cls._class_name(), in_key_to_display_for_error_message, model.__class__.__name__)
+            if key_for_error_message:
+                message = "Expected model to be '%s' but key '%s' points to model '%s'" % (cls._class_name(), key_for_error_message, model.__class__.__name__)
             else:
                 message = "Expected model to be '%s' but got '%s'" % (cls._class_name(), model.__class__.__name__)
             raise NdbModelMismatchError(message)
 
+    def _patch_dict(self, data, patch):
+        '''
+        Update the data dictionary with content from patch
+        '''
+        for key in set(data.keys() + patch.keys()):
+            data_entry = data.get(key)
+            patch_entry = patch.get(key)
+
+            if isinstance(data_entry, dict) or isinstance(patch_entry, dict):
+                if data_entry is None:
+                    data[key] = {}
+                if patch_entry is None:
+                    patch[key] = {}
+                self._patch_dict(data[key], patch[key])
+            else:
+                if patch_entry is not None:
+                    data[key] = patch_entry
+
+    def update(self, in_dict, skip_null_value=False):
+        '''Update model's properties from input dictionary'''
+        data_dict = self._parser.set_dict_for_model(in_dict, remove_null_entries=skip_null_value)
+        self.populate(**data_dict)
+        return self
+
+    def patch(self, in_dict, skip_null_value=False):
+        '''Patch the model'''
+        current_data = self.json_dict()
+        self._patch_dict(current_data, in_dict)
+        data_dict = self._parser.set_dict_for_model(current_data, remove_null_entries=skip_null_value)
+        self.populate(**data_dict)
+        return self
+
     @classmethod
-    def create_from_dict(cls, in_dict, parent=None, skip_null_value=False):
-        '''
-        Factory method to create a new model from a dictionary
-
-        # ToDo: add validation for given input from _classname_property if defined.
-        '''
-
-        key_defined = hasattr(cls, '_key_property') and cls._key_property is not None
-        id_defined = hasattr(cls, '_identity_property') and cls._identity_property is not None
-        parent_defined = hasattr(cls, '_parent_property') and cls._parent_property is not None
-
-        if key_defined and cls._key_property in in_dict:
-            raise NdbModelError("'%s' key entry is not expected in the .create_from_dict method" % cls._key_property)
-
+    def create_from_dict(cls, in_dict, in_id=None, in_parent=None, skip_null_value=False):
+        '''Create a new model from a dictionary'''
         creation_kwargs = {}
 
-        if id_defined and cls._identity_property in in_dict:
-            creation_kwargs["id"] = in_dict.get(cls._identity_property)
+        if in_id:
+            creation_kwargs["id"] = in_id
 
-        # If parent param used, use that instead of the ._parent_property defined
-        if parent is not None:
-            creation_kwargs["parent"] = parent
-        elif parent_defined and cls._parent_property in in_dict:
-            creation_kwargs["parent"] = in_dict.get(cls._parent_property)
+        if in_parent is not None:
+            creation_kwargs["parent"] = in_parent
 
         model = cls(**creation_kwargs)
-        in_dict = model._parser.set_dict_for_model(in_dict, skip_null_value=skip_null_value)
-
-        return model.__update_model(in_dict, skip_null_value=skip_null_value)
+        return model.update(in_dict, skip_null_value=skip_null_value) # pylint: disable=W0212
 
     @classmethod
-    def update_from_dict(cls, in_dict, parent=None, skip_null_value=False):
+    def update_from_dict(cls, in_dict, in_key, skip_null_value=False):
         '''
-        Update an existing model from a dictionary.  A unique identifier must be provided
-        and can be either a key or an ID.
+        Update the model of the input key with the supplied dictionary.
 
-        Please note that for entity with ancestor, use key or set the parent property.
+        Exceptions: InvalidKeyError, NdbModelMismatchError
         '''
 
-        key_defined = hasattr(cls, '_key_property') and cls._key_property is not None
-        id_defined = hasattr(cls, '_identity_property') and cls._identity_property is not None
-        parent_defined = hasattr(cls, '_parent_property') and cls._parent_property is not None
-
-        if key_defined and cls._key_property in in_dict:
-            key_provided = in_dict.get(cls._key_property)
-            id_provided = None
-        elif id_defined and cls._identity_property in in_dict:
-            key_provided = None
-            id_provided = in_dict.get(cls._identity_property)
-        else:
-            # Create error message as key or id is either not set or not populated
-            if key_defined or id_defined:
-                attrs = []
-
-                if key_defined:
-                    attrs.append("'%s'" % cls._key_property)
-                if id_defined:
-                    attrs.append("'%s'" % cls._identity_property)
-
-                if len(attrs) == 1:
-                    cols_name = attrs[0]
-                else:
-                    cols_name = ", ".join(attrs)
-
-                raise NdbModelError("%s identifier(s) expected in the .update_from_dict method" % cols_name)
-            else:
-                raise NdbModelError("Either _key_property or _identity_property needs to be defined in order to use .update_from_dict method")
-
-        if id_provided is not None:
-            # Parent is only relevant when ID is provided instead of key
-            if parent is not None:
-                parent_provided = parent
-            elif parent_defined and cls._parent_property in in_dict:
-                parent_provided = in_dict.get(cls._parent_property)
-            else:
-                parent_provided = None
-            key = ndb.Key(cls, id_provided, parent=ModelParser.decode_ndb_key(parent_provided))
-        elif key_provided is not None:
-            key = ModelParser.decode_ndb_key(key_provided)
-
+        key = ModelParser.decode_ndb_key(in_key, raise_exception=True)
         model = key.get()
         if model is None:
-            raise NdbModelError("Entry not found for key %s" % key_provided)
+            err_message = "Entry not found for key %s" % in_key
+            raise InvalidKeyError(message=err_message)
 
-        cls.__raise_if_not_same_class(model, key_provided)
+        cls.__raise_if_not_same_class(model)
+        return model.update(in_dict, skip_null_value=skip_null_value) # pylint: disable=W0212
 
-        return model.__update_model(in_dict, insert_mode=False, skip_null_value=skip_null_value)
+    @classmethod
+    def patch_from_dict(cls, in_dict, in_key, skip_null_value=False):
+        '''
+        Patch the model of the input key with the supplied dictionary.
+
+        Exceptions: InvalidKeyError, NdbModelMismatchError
+        '''
+
+        key = ModelParser.decode_ndb_key(in_key, raise_exception=True)
+        model = key.get()
+        if model is None:
+            err_message = "Entry not found for key %s" % in_key
+            raise InvalidKeyError(message=err_message)
+
+        cls.__raise_if_not_same_class(model)
+        return model.patch(in_dict, skip_null_value=skip_null_value) # pylint: disable=W0212
 
     @classmethod
     def get_by_urlsafe(cls, urlsafe_key):
@@ -485,3 +469,32 @@ class NdbUtilMixIn(object):
         for entry in cls.query(*args, **kwargs):
             return entry
 
+
+# ==============================================================================
+# Define Stub Model -- Model that cannot be saved
+#
+class StubModel(NdbUtilMixIn, ndb.Model):
+    '''
+    Disable the put related methods
+    '''
+    def _put_async(self):
+        raise PutMethodDisabledError(self.__class__)
+    put_async = _put_async
+
+    def set_from_model(self, source_model):
+        self._apply_model_data(self, source_model)
+
+    def set_to_model(self, dest_model):
+        self._apply_model_data(dest_model, self)
+        return dest_model
+
+    @classmethod
+    def _apply_model_data(cls, dest_model, source_model):
+        '''Copy the data from source model to dest model only where properties name matches'''
+        # ToDo: Implement recurisve json_dict() methods dealing with StructuredProperty in NdbUtilMixIn
+        #       instead of the 'key' based hack below.
+        for name, prop in dest_model._properties.items():
+            if name == 'key' and isinstance(prop, ndb.Key):
+                prop._set_value(dest_model, source_model.key)
+            elif hasattr(source_model, name):
+                prop._set_value(dest_model, getattr(source_model, name))
