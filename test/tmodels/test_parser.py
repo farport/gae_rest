@@ -9,13 +9,16 @@ import time
 import testlib
 
 from google.appengine.ext import ndb
-from models import NdbUtilMixIn, ModelParser # pylint: disable=E0401
+from models import NdbUtilMixIn, ModelParser, ParserConversionError # pylint: disable=E0401
 
 READER = testlib.JsonDataReader(__file__)
 
 # -------------------------------------------------------
-# Define basic model.  Testing a deep nesting model
+# Define basic model.
 class DateParser(ModelParser):
+    '''
+    Simple Model Parse that convert the datetime to integer
+    '''
     def value_for_property(self, prop, value):
         '''Expect input datetime value to be an integer'''
         if value is None:
@@ -28,7 +31,6 @@ class DateParser(ModelParser):
             result = super(DateParser, self).value_for_property(prop, value)
 
         return result
-
 
     def text_from_property(self, prop, value):
         '''Output integer for datetime value'''
@@ -61,6 +63,7 @@ class ModelParserTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.shared = testlib.SharedTestData()
+        # timestamp of 1492950082 in datetime:
         cls.create_dt = datetime.datetime(2017, 4, 23, 14, 21, 22)
         cls.birth_dt = datetime.date(1990, 1, 19)
         cls.maxDiff = None
@@ -70,7 +73,7 @@ class ModelParserTest(unittest.TestCase):
         return READER.get('parser/%s' % fname)
 
     def test01_create(self):
-        '''Make sure create works'''
+        '''Make sure models is created correctly'''
         data = self.get_data("person.json")
         person = Person.create_from_dict(data)
         self.shared.set(person.put(), "person_key")
@@ -79,7 +82,7 @@ class ModelParserTest(unittest.TestCase):
         self.assertEqual(person.created_on, self.create_dt)
 
     def test02_get(self):
-        '''Make sure that get works'''
+        '''Make sure that get will return expected dictionary'''
         data = self.get_data("person.json")
         key = self.shared.get("person_key")
         person = key.get()
@@ -88,6 +91,26 @@ class ModelParserTest(unittest.TestCase):
         self.assertEqual(person.created_on, self.create_dt)
 
         self.assertDictEqual(person.json_dict(), data)
+
+    def test04_create_null(self):
+        '''Make sure null data are handled correctly'''
+        data = self.get_data("person_null.json")
+        result = {"name": "NULL Person"}
+        person = Person.create_from_dict(data)
+        person.put()
+
+        self.assertEqual(person.name, result["name"])
+        self.assertIsNone(person.birthday)
+        self.assertIsNone(person.created_on)
+
+        self.assertDictEqual(person.json_dict(), data)
+        # Make sure skip null works
+        self.assertDictEqual(person.json_dict(skip_null_value=True), result)
+
+    def test05_create_error(self):
+        '''Check conversion error handler'''
+        data = self.get_data("person_error.json")
+        self.assertRaises(ParserConversionError, Person.create_from_dict, data)
 
 
 if __name__ == '__main__':

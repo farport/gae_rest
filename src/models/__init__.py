@@ -46,6 +46,15 @@ class DuplicateEntryError(NdbModelError):
     '''Exception due to _unique_properties'''
     pass
 
+class ParserConversionError(NdbModelError):
+    '''Error when value conversion fails in ModelParser'''
+    def __init__(self, in_message, ex):
+        if isinstance(ex, Exception):
+            message = "%s.  %s: %s" % (in_message, ex.__class__.__name__, ex)
+        else:
+            message = in_message
+        super(ParserConversionError, self).__init__(message)
+
 class InvalidValueError(NdbModelError, BadValueError):
     '''Generic ValueError'''
     pass
@@ -185,7 +194,11 @@ class ModelParser(object):
                     raise InvalidValueError("ndb.StructuredProperty '%s' expect a dict as value but got '%s' of type '%s'" % (prop, value, type(value)))
             else:
                 # Update the entry
-                in_dict[key] = cv_val(prop, value)
+                try:
+                    in_dict[key] = cv_val(prop, value)
+                except StandardError as ex:
+                    message = "Failed to run .%s converting %s for %s" % (cv_val.__name__, value, prop)
+                    raise ParserConversionError(message, ex)
 
         # Delete null entries if needed
         if remove_null_entries:
