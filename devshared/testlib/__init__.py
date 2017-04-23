@@ -345,3 +345,10 @@ class CaptureLogger(object):
         self._io.truncate(0)
 
         return result
+
+# Paver based tasks related utilities
+def gen_package_tasks(pkg_name, *task_names):
+    result = []
+    for tname in task_names:
+        result.append("%s.%s" % (pkg_name, tname))
+    return result

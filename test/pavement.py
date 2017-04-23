@@ -10,6 +10,17 @@ execute all tests in that packages.
 The actually running of the task is done via the TestRunner,
 which is a Singleton that would collect all tests and finally
 executed in this package.
+
+Usage:
+
+# paver
+-> Run all tests
+
+# paver byname <name1>, <name2>, ...
+-> Run all test case if name matches names
+
+# paver bytask <task1>, <task2>, ...
+-> Run all test from tasks passed.  If a task if not found, try <task>.default
 '''
 
 from __future__ import print_function
@@ -25,7 +36,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 TRUNNER = TestRunner()
 ENV = tasks.Environment()
-ALL_TASKS = ['corelib.default', 'test_models.default']
+ALL_TASKS = ['tcore.default', 'tmodels.default']
 
 
 def task_exists(task_name):

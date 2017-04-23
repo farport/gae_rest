@@ -3,8 +3,6 @@ Tasks to execute the test
 '''
 # pylint: disable=C0111
 
-from __future__ import print_function
-
 from paver.easy import task, needs
 
 import testlib
@@ -14,12 +12,12 @@ TRUNNER = testlib.TestRunner()
 
 
 @task
-@needs('corelib.lib')
+@needs('tcore.lib')
 def nested():
     TRUNNER.add(test_simple.SimpleNdbNestedTest)
 
 
 @task
-@needs('test_models.nested')
+@needs('tmodels.nested')
 def default():
     pass
