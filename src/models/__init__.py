@@ -4,11 +4,10 @@ ndb.Model related utilities
 by: marcos.lin@farport.co
 on: 23 April 2017
 
-NdbUtilMixIn has the following focus:
+NdbModelMixIn has the following focus:
 * Facilitate setting of a ndb.Model from a dictionary
 * Create a dictionary for output to JSON
 * Provide a standard by of converting value to and from model and dictionary
-
 '''
 # pylint: disable=W0212
 
@@ -31,7 +30,7 @@ with ConfigurationStore() as c:
 # Define Exceptions
 #
 class NdbModelError(Error):
-    '''Generic and base error used by NdbUtilMixIn object'''
+    '''Generic and base error used by NdbModelMixIn object'''
     pass
 
 class NdbModelMismatchError(NdbModelError):
@@ -39,7 +38,7 @@ class NdbModelMismatchError(NdbModelError):
     pass
 
 class NdbModelInitializationError(NdbModelError):
-    '''Error while trying to initialize a model with NdbUtilMixIn'''
+    '''Error while trying to initialize a model with NdbModelMixIn'''
     pass
 
 class DuplicateEntryError(NdbModelError):
@@ -284,7 +283,7 @@ class ModelParser(object):
         return in_dict
 
 
-class NdbUtilMixIn(object):
+class NdbModelMixIn(object):
     '''
     This MixIn allow updating of entities using key.
 
@@ -299,7 +298,7 @@ class NdbUtilMixIn(object):
     _mode_parser_class:   NdbModelParser to use
 
     NOTE: this must be first parent of multiple inherentance to ensure
-          that NdbUtilMixIn.__init__() is called.
+          that NdbModelMixIn.__init__() is called.
 
     ToDo: Implement .check_unique_properties using a unique key ndb.Model
     '''
@@ -328,7 +327,7 @@ class NdbUtilMixIn(object):
 
         self.__init_class_variables()
 
-        super(NdbUtilMixIn, self).__init__(*args, **kwargs)
+        super(NdbModelMixIn, self).__init__(*args, **kwargs)
 
     def __raise_dup_unique_properties(self, key):
         entry = key.get(use_cache=False)
@@ -500,7 +499,7 @@ class NdbUtilMixIn(object):
 # ==============================================================================
 # Define Stub Model -- Model that cannot be saved
 #
-class StubModel(NdbUtilMixIn, ndb.Model):
+class StubModel(NdbModelMixIn, ndb.Model):
     '''
     Disable the put related methods
     '''
@@ -521,7 +520,7 @@ class StubModel(NdbUtilMixIn, ndb.Model):
     @classmethod
     def _apply_model_data(cls, dest_model, source_model):
         '''Copy the data from source model to dest model only where properties name matches'''
-        # ToDo: Implement recurisve json_dict() methods dealing with StructuredProperty in NdbUtilMixIn
+        # ToDo: Implement recurisve json_dict() methods dealing with StructuredProperty in NdbModelMixIn
         #       instead of the 'key' based hack below.
         for name, prop in dest_model._properties.items():
             if name == 'key' and isinstance(prop, ndb.Key):

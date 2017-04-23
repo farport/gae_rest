@@ -9,7 +9,7 @@ import testlib
 
 from google.appengine.ext import ndb
 from google.appengine.api.datastore_errors import BadValueError
-from models import NdbUtilMixIn, MissingRequiredPropertyError # pylint: disable=E0401
+from models import NdbModelMixIn, MissingRequiredPropertyError # pylint: disable=E0401
 
 READER = testlib.JsonDataReader(__file__)
 
@@ -30,7 +30,7 @@ class Address(ndb.Model):
     lines = ndb.StringProperty(repeated=True)
     city_country = ndb.StructuredProperty(CityCountry)
 
-class Person(NdbUtilMixIn, ndb.Model):
+class Person(NdbModelMixIn, ndb.Model):
     first_name = ndb.StringProperty()
     last_name = ndb.StringProperty()
     age = ndb.IntegerProperty()

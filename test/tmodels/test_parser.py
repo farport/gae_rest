@@ -1,5 +1,5 @@
 '''
-Testing ModelParser for NdbUtilMixIn
+Testing ModelParser for NdbModelMixIn
 '''
 
 import unittest
@@ -9,7 +9,7 @@ import time
 import testlib
 
 from google.appengine.ext import ndb
-from models import NdbUtilMixIn, ModelParser, ParserConversionError # pylint: disable=E0401
+from models import NdbModelMixIn, ModelParser, ParserConversionError # pylint: disable=E0401
 
 READER = testlib.JsonDataReader(__file__)
 
@@ -46,7 +46,7 @@ class DateParser(ModelParser):
         return result
 
 
-class Person(NdbUtilMixIn, ndb.Model):
+class Person(NdbModelMixIn, ndb.Model):
     _mode_parser_class = DateParser
 
     name = ndb.StringProperty()
