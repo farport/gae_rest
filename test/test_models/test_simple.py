@@ -151,7 +151,7 @@ class SimpleNdbNestedTest(unittest.TestCase):
 
     def test10_required_error(self):
         '''Test required property'''
-        Person._required_properties = ('modified_on', )
+        Person._required_properties = ('modified_on', ) # pylint: disable=W0212
 
         data = self.get_data("person01.json")
         person = Person.create_from_dict(data)
