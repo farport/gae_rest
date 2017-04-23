@@ -319,7 +319,7 @@ class CaptureLogger(object):
             for line in content.split(os.linesep):
                 if line:
                     if self.RECORD_SEPARATOR in line:
-                        level, message = line.split(self.RECORD_SEPARATOR)
+                        level, message = line.split(self.RECORD_SEPARATOR, 1)
                     else:
                         level = None
                         message = line
