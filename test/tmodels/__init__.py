@@ -18,6 +18,6 @@ def nested():
 
 
 @task
-@needs('tmodels.nested')
+@needs(testlib.gen_package_tasks(__name__, 'nested'))
 def default():
     pass
