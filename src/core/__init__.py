@@ -62,14 +62,11 @@ def scream_print(*args):
     '''
     core.scream is used to print out text, mostly for debug purposes
     '''
-
-
-
     if __debug__:
         message = [Color.BOLD, Color.RED, "### "]
         message.extend(args)
         message.append(Color.END)
-        print(''.join(message))
+        print(''.join([str(x) for x in message]))
 
 
 # ==============================================================================

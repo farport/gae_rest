@@ -435,7 +435,7 @@ class NdbModelMixIn(object):
             creation_kwargs["id"] = in_id
 
         if in_parent is not None:
-            creation_kwargs["parent"] = in_parent
+            creation_kwargs["parent"] = ModelParser.decode_ndb_key(in_parent)
 
         model = cls(**creation_kwargs)
         return model.update(in_dict, skip_null_value=skip_null_value)
@@ -475,19 +475,22 @@ class NdbModelMixIn(object):
         return model.patch(in_dict, skip_null_value=skip_null_value)
 
     @classmethod
-    def get_by_urlsafe(cls, urlsafe_key):
+    def get_by_urlsafe(cls, urlsafe_key, key_only=False):
         '''Get an entity by key in urlsafe format.'''
 
         key = ModelParser.decode_ndb_key(urlsafe_key)
         if key is None:
             return None
 
-        entry = key.get()
-        if entry:
-            cls.__raise_if_not_same_class(entry, urlsafe_key)
-            return entry
+        if key_only:
+            return key
         else:
-            return None
+            entry = key.get()
+            if entry:
+                cls.__raise_if_not_same_class(entry, urlsafe_key)
+                return entry
+            else:
+                return None
 
     @classmethod
     def get_first(cls, *args, **kwargs):
