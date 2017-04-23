@@ -5,6 +5,7 @@ Created on 13 Sep 2016
 
 Load lib directory under src in sys.path
 '''
+# pylint: disable=C0111,C0413,E0401,W0201,W0212,R0903
 
 from __future__ import print_function
 
@@ -28,7 +29,7 @@ def _initialize_lib():
 _initialize_lib()
 
 # Basic init for app engine
-from core import Singleton
+from core import Singleton # pylint: disable=
 # Make App Enginge Works
 import dev_appserver
 dev_appserver.fix_sys_path()
@@ -37,8 +38,8 @@ dev_appserver.fix_sys_path()
 def _google_package_hack():
     '''Hack to solve the problem with 2 google packages'''
     file_dir = os.path.dirname(__file__)
-    with open(os.path.join(file_dir, "..", "..", "venv", "lib", "python2.7", "site-packages", "google_appengine.pth")) as fh:
-        for line in fh:
+    with open(os.path.join(file_dir, "..", "..", "venv", "lib", "python2.7", "site-packages", "google_appengine.pth")) as _:
+        for line in _:
             appengine_sdk_path = line.rstrip()
     google.__path__.append(os.path.join(appengine_sdk_path, "google"))
 
@@ -115,27 +116,27 @@ class AppEngineTestbed(object):
     _datastore_mode = None
 
     def __set_datastore_mode(self, mode, show_message):
-        tb = self._testbed
+        tbed = self._testbed
 
         if mode is None:
-            tb.deactivate()
+            tbed.deactivate()
             if show_message:
                 print("\n# Testbest deactivated")
         else:
-            tb.activate()
+            tbed.activate()
             if mode == "normal":
-                tb.init_datastore_v3_stub()
+                tbed.init_datastore_v3_stub()
             elif mode == "HR":
                 # Test to High Replication mode with 100% percent probability of writes being applied
                 # Ie: global query without ancestry should always return items after .put()
                 # REF: https://cloud.google.com/appengine/docs/python/tools/localunittesting
                 policy = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=1)
-                tb.init_datastore_v3_stub(consistency_policy=policy)
+                tbed.init_datastore_v3_stub(consistency_policy=policy)
             elif mode == "HR_P0":
                 # Test to High Replication mode with 0% percent probabily of writes being applied
                 # Ie: global query without ancestry should never return items after .put()
                 policy = datastore_stub_util.PseudoRandomHRConsistencyPolicy(probability=0)
-                tb.init_datastore_v3_stub(consistency_policy=policy)
+                tbed.init_datastore_v3_stub(consistency_policy=policy)
             else:
                 raise ValueError("Unsupported datastore_mode '%s'" % mode)
 
@@ -143,12 +144,12 @@ class AppEngineTestbed(object):
                 print("\n# Testbest started with '%s' mode\n" % mode)
 
             # Prepare queue
-            tb.init_taskqueue_stub(
+            tbed.init_taskqueue_stub(
                 root_path=os.path.join(os.path.dirname(__file__), '../resources'))
-            self.taskqueue_stub = tb.get_stub(testbed.TASKQUEUE_SERVICE_NAME)
+            self.taskqueue_stub = tbed.get_stub(testbed.TASKQUEUE_SERVICE_NAME)
 
             # Prepare memcache
-            tb.init_memcache_stub()
+            tbed.init_memcache_stub()
 
 
     def set_mode(self, mode, show_message=False):
@@ -224,8 +225,8 @@ class JsonDataReader(object):
             if data_file.endswith(".json"):
                 data = json.load(_)
                 return EasyAccessDict(data)
-            else:
-                return _.read()
+
+            return _.read()
 
 
 class EasyAccessDict(dict):

@@ -1,13 +1,14 @@
 '''
 Testing core library
 '''
+# pylint: disable=W0212,C0103
 
 import unittest
 import os
 import logging
 
 import testlib
-from core import ConfigurationStore
+from core import ConfigurationStore # pylint: disable=E0401
 
 SCRIPT_DIR = os.path.realpath(os.path.dirname(__file__))
 READER = testlib.JsonDataReader(__file__)
@@ -113,8 +114,8 @@ class TestConfigurationStore(unittest.TestCase):
     Testing core.ConfigurationStore.  The testing directory is set to the `config` dir
     because the normal dir would actually be `core`, which is located at the same
     '''
-
-    def _get_path(self, *dirs):
+    @classmethod
+    def _get_path(cls, *dirs):
         if dirs:
             result = os.path.realpath(os.path.join(SCRIPT_DIR, *dirs))
         else:

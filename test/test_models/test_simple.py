@@ -42,8 +42,6 @@ class Person(NdbUtilMixIn, ndb.Model):
     def _pre_put_hook(self):
         self.check_required_properties()
 
-# "created_on": "2017-04-19T22:04:09"
-
 # -------------------------------------------------------
 # Define tests
 
@@ -90,7 +88,7 @@ class SimpleNdbNestedTest(unittest.TestCase):
         person = key.get()
         self.assertDictEqual(person.json_dict(skip_null_value=True), data)
 
-        expected_created_on = datetime.datetime(2017, 4, 20, 18, 56, 39,75310)
+        expected_created_on = datetime.datetime(2017, 4, 20, 18, 56, 39, 75310)
         self.assertEqual(person.created_on, expected_created_on)
 
     def test04_update_from_dict(self):
