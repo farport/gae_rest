@@ -3,6 +3,12 @@ ndb.Model related utilities
 
 by: marcos.lin@farport.co
 on: 23 April 2017
+
+NdbUtilMixIn has the following focus:
+* Facilitate setting of a ndb.Model from a dictionary
+* Create a dictionary for output to JSON
+* Provide a standard by of converting value to and from model and dictionary
+
 '''
 # pylint: disable=W0212
 

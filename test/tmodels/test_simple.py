@@ -55,7 +55,7 @@ class SimpleNdbNestedTest(unittest.TestCase):
 
     def get_data(self, fname):
         '''All data for this test is under 'data/simple/' dir'''
-        return READER.get('simple/%s' % fname)
+        return READER.get('nested/%s' % fname)
 
     def test01_create_from_dict(self):
         '''Make sure that create_from_dict model from dict works'''
@@ -159,5 +159,7 @@ class SimpleNdbNestedTest(unittest.TestCase):
         self.assertRaises(MissingRequiredPropertyError, person.put)
         self.assertRaises(BadValueError, person.put)
 
+
 if __name__ == '__main__':
+    # TestRunner is needed here as it will setup the datastore
     testlib.TestRunner.run(SimpleNdbNestedTest, verbosity=2, failfast=True)
