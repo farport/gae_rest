@@ -20,6 +20,21 @@ import datetime
 # code debug print statement
 import inspect
 
+class Color(object): # pylint: disable=R0903
+    '''Color for terminal constants'''
+    PURPLE = '\033[95m'
+    CYAN = '\033[96m'
+    DARKCYAN = '\033[36m'
+    BLUE = '\033[94m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+    DARKGRAY = '\033[90m'
+    END = '\033[0m'
+
+
 def trace(*args):
     '''
     core.trace is light weight debug statement to be used for code that imports this package.
@@ -41,7 +56,20 @@ def trace(*args):
                     msgs.append(arg)
                 else:
                     msgs.append(str(arg))
-            print("T.%s: %s (%s)" % (caller, ''.join(msgs), filename))
+            print("%sT.%s: %s (%s)%s" % (Color.DARKGRAY, caller, ''.join(msgs), filename, Color.END))
+
+def scream_print(*args):
+    '''
+    core.scream is used to print out text, mostly for debug purposes
+    '''
+
+
+
+    if __debug__:
+        message = [Color.BOLD, Color.RED, "### "]
+        message.extend(args)
+        message.append(Color.END)
+        print(''.join(message))
 
 
 # ==============================================================================
