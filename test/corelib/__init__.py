@@ -1,34 +1,36 @@
 '''
 Tasks to execute the test
 '''
+# pylint: disable=C0111
+
 from __future__ import print_function
 
 from paver.easy import task, needs
-from . import tests
 
 import testlib
+from . import tests
 
 TRUNNER = testlib.TestRunner()
 
-
-def getTasksFromCurrentPackage(*tasks):
+def gen_tasks_from_current_package(*tasks):
+    '''Prepend the package name'''
     res = []
-    for task in tasks:
-        res.append('corelib.%s' % task)
+    for _ in tasks:
+        res.append('corelib.%s' % _)
     return res
 
 
 @task
-def test_configuration_store():
+def config():
     TRUNNER.add(tests.TestConfigurationStore)
 
+
 @task
-def test_testlib():
+def lib():
     TRUNNER.add(tests.TestLibTests)
 
-# @needs([getTaskFromCurrentPackage('configuration_store')])
-@task
-@needs(getTasksFromCurrentPackage('test_testlib', 'test_configuration_store'))
-def all():
-    print("All tasks ran")
 
+@task
+@needs(gen_tasks_from_current_package('lib', 'config'))
+def default():
+    pass

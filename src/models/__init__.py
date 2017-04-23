@@ -1,3 +1,11 @@
+'''
+ndb.Model related utilities
+
+by: marcos.lin@farport.co
+on: 23 April 2017
+'''
+# pylint: disable=W0212
+
 from __future__ import print_function
 
 import copy
@@ -106,8 +114,8 @@ class ModelParser(object):
             except ProtocolBufferDecodeError:
                 if raise_exception:
                     raise InvalidKeyError(in_key)
-            except StandardError as e:
-                if e.__class__.__name__ == 'ProtocolBufferDecodeError':
+            except StandardError as ex:
+                if ex.__class__.__name__ == 'ProtocolBufferDecodeError':
                     if raise_exception:
                         raise InvalidKeyError(in_key)
                 else:
@@ -412,7 +420,7 @@ class NdbUtilMixIn(object):
             creation_kwargs["parent"] = in_parent
 
         model = cls(**creation_kwargs)
-        return model.update(in_dict, skip_null_value=skip_null_value) # pylint: disable=W0212
+        return model.update(in_dict, skip_null_value=skip_null_value)
 
     @classmethod
     def update_from_dict(cls, in_dict, in_key, skip_null_value=False):
@@ -429,7 +437,7 @@ class NdbUtilMixIn(object):
             raise InvalidKeyError(message=err_message)
 
         cls.__raise_if_not_same_class(model)
-        return model.update(in_dict, skip_null_value=skip_null_value) # pylint: disable=W0212
+        return model.update(in_dict, skip_null_value=skip_null_value)
 
     @classmethod
     def patch_from_dict(cls, in_dict, in_key, skip_null_value=False):
@@ -446,7 +454,7 @@ class NdbUtilMixIn(object):
             raise InvalidKeyError(message=err_message)
 
         cls.__raise_if_not_same_class(model)
-        return model.patch(in_dict, skip_null_value=skip_null_value) # pylint: disable=W0212
+        return model.patch(in_dict, skip_null_value=skip_null_value)
 
     @classmethod
     def get_by_urlsafe(cls, urlsafe_key):
@@ -477,14 +485,17 @@ class StubModel(NdbUtilMixIn, ndb.Model):
     '''
     Disable the put related methods
     '''
-    def _put_async(self):
+    def _put_async(self, **ctx_options):
+        '''Trap async put'''
         raise PutMethodDisabledError(self.__class__)
     put_async = _put_async
 
     def set_from_model(self, source_model):
+        '''Copy data from input source_model to stub model'''
         self._apply_model_data(self, source_model)
 
     def set_to_model(self, dest_model):
+        '''Copy data from stub model to input source_model'''
         self._apply_model_data(dest_model, self)
         return dest_model
 
