@@ -81,12 +81,25 @@ class TestRunner(object):
         return runner.run(unittest.makeSuite(test_case)).wasSuccessful()
 
     @classmethod
-    def run_all(cls, test_cases, verbosity=2, failfast=True):
+    def run_all(cls, test_cases, test_name=None, verbosity=2, failfast=True):
         '''Pass a list of test cases and call .run method'''
+        tests_ran = 0
         for tcase in test_cases:
-            run_ok = cls.run(tcase, verbosity, failfast)
+            if test_name is None:
+                run_ok = cls.run(tcase, verbosity, failfast)
+                tests_ran += 1
+            else:
+                # Only run if test_name matches
+                if test_name in tcase.__name__:
+                    run_ok = cls.run(tcase, verbosity, failfast)
+                    tests_ran += 1
+                else:
+                    # Just assumed that test ran ok
+                    run_ok = True
             if failfast and not run_ok:
                 break
+
+        return tests_ran
 
     def __init__(self):
         self._tcases = []
@@ -95,9 +108,9 @@ class TestRunner(object):
         '''Store the test case passed to be ran later with .run_added'''
         self._tcases.append(test_case)
 
-    def run_added(self, verbosity=2, failfast=True):
+    def run_added(self, test_name=None, verbosity=2, failfast=True):
         '''Run stored test cases'''
-        self.run_all(self._tcases, verbosity, failfast)
+        return self.run_all(self._tcases, test_name, verbosity, failfast)
 
 
 class AppEngineTestbed(object):
