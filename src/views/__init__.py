@@ -14,7 +14,7 @@ import json
 from google.appengine.ext import ndb
 
 from core import ConfigurationStore, scream_print
-
+from models import NdbModelError, NdbModelMismatchError
 with ConfigurationStore() as c:
     LOGGER = c.logger
 
@@ -22,7 +22,7 @@ with ConfigurationStore() as c:
 # ==============================================================================
 # Define Exceptions
 #
-class NdbViewError(StandardError):
+class NdbViewError(NdbModelError):
     pass
 
 
@@ -92,7 +92,9 @@ class NdbViewMixIn(object):
     @classmethod
     def _read_dict_attributes(cls, in_dict):
         '''
-        Parse the input dictionary for the defined attributes
+        Parse the input dictionary for the defined attributes used by methods that is designed
+        to update the model.
+
         Note: will modify incoming dictionary
         '''
         result = {}
@@ -100,6 +102,11 @@ class NdbViewMixIn(object):
         for attr, reskey in cls.ATTRIBUTE_RESULT_MAP.iteritems():
             attr_value = getattr(cls, attr)
             if attr_value and attr_value in in_dict:
+                # Make sure that classname is used correctly
+                if attr == "_classname_property":
+                    if in_dict[attr_value] != cls.__name__:
+                        raise NdbModelMismatchError("Expected '%s' but got '%s' for '%s' property" % (cls.__name__, in_dict[attr_value], attr_value))
+
                 result[reskey] = in_dict[attr_value]
                 del in_dict[attr_value]
 

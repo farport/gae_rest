@@ -1,7 +1,7 @@
 {
     "idperson": 0,
     "key": "",
-    "type": "Person",
+    "type": "PersonView",
     "parent_key": null,
     "name": "Mario Fiori",
     "balance": 12.34,

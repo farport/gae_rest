@@ -9,14 +9,14 @@ import time
 import testlib
 
 from google.appengine.ext import ndb
-from models import NdbModelMixIn, ModelParser # pylint: disable=E0401
+from models import NdbModelMixIn, ModelParser, NdbModelMismatchError # pylint: disable=E0401
 from views import NdbViewMixIn # pylint: disable=E0401
 
 READER = testlib.JsonDataReader(__file__)
 
 # -------------------------------------------------------
 # Define basic model.
-class Person(NdbModelMixIn, NdbViewMixIn, ndb.Model):
+class PersonView(NdbModelMixIn, NdbViewMixIn, ndb.Model):
     _identity_property = "idperson"
     _classname_property = "type"
     _parent_property = "parent_key"
@@ -33,6 +33,7 @@ class ViewTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        testlib.SharedTestData.unload()
         cls.shared = testlib.SharedTestData()
         cls.maxDiff = None
 
@@ -42,7 +43,7 @@ class ViewTest(unittest.TestCase):
     def test01_create(self):
         '''Make sure that model can be created'''
         data = self.get_data("person01.json")
-        person = Person.view_create(data)
+        person = PersonView.view_create(data)
         urlsafe_key = person["key"]
         key = ndb.Key(urlsafe=urlsafe_key)
         self.shared.set(key, "person01_key")
@@ -57,7 +58,7 @@ class ViewTest(unittest.TestCase):
         '''Make sure that .view_get returns the right values'''
         result = self.get_data("person01_view.json")
         key = self.shared.get("person01_key")
-        person = Person.view_get(key.urlsafe())
+        person = PersonView.view_get(key.urlsafe())
 
         result["idperson"] = key.id()
         result["key"] = key.urlsafe()
@@ -68,7 +69,7 @@ class ViewTest(unittest.TestCase):
     def test03_view_create_parsed(self):
         '''Make sure that view._read_dict_attributes works'''
         data_dict = self.shared.get("person01_result")
-        parsed = Person._read_dict_attributes(data_dict.copy()) # pylint: disable=W0212
+        parsed = PersonView._read_dict_attributes(data_dict.copy()) # pylint: disable=W0212
 
         self.assertEqual(parsed["key"], data_dict.get("key"))
         self.assertEqual(parsed["id"], data_dict.get("idperson"))
@@ -85,9 +86,9 @@ class ViewTest(unittest.TestCase):
         result = data.copy()
         result["idperson"] = key.id()
         result["parent_key"] = None
-        result["type"] = "Person"
+        result["type"] = "PersonView"
 
-        person = Person.view_update(data)
+        person = PersonView.view_update(data)
         self.assertDictEqual(person, result)
         self.shared.set(person, "person01_result")
 
@@ -98,7 +99,7 @@ class ViewTest(unittest.TestCase):
         data["parent_key"] = parent_key.urlsafe()
         result = data.copy()
 
-        person = Person.view_create(data)
+        person = PersonView.view_create(data)
         urlsafe_key = person["key"]
         key = ndb.Key(urlsafe=urlsafe_key)
         self.shared.set(key, "person02_key")
@@ -110,7 +111,7 @@ class ViewTest(unittest.TestCase):
     def test06_view_create(self):
         '''Create 3rd person'''
         data = self.get_data("person03.json")
-        person = Person.view_create(data)
+        person = PersonView.view_create(data)
 
         urlsafe_key = person["key"]
         key = ndb.Key(urlsafe=urlsafe_key)
@@ -129,12 +130,18 @@ class ViewTest(unittest.TestCase):
         result["idperson"] = key.id()
         result["name"] = data["name"]
         result["key"] = data["key"]
-        result["type"] = "Person"
+        result["type"] = "PersonView"
         result["parent_key"] = None
 
-        person = Person.view_patch(data)
+        person = PersonView.view_patch(data)
         self.assertDictEqual(person, result)
         self.shared.set(person, "person03_result")
+
+    def test08_view_create_error(self):
+        '''Make sure that wrong _classname_property setting raise exception'''
+        data = self.get_data("person01.json")
+        data["type"] = "Person"
+        self.assertRaises(NdbModelMismatchError, PersonView.view_create, data)
 
     def test10_view_query(self):
         '''Make sure query works'''
@@ -145,7 +152,7 @@ class ViewTest(unittest.TestCase):
 
         data = {}
         tcount = 0
-        for entry in Person.view_query():
+        for entry in PersonView.view_query():
             data[entry['key']] = entry
             tcount += 1
 
@@ -162,7 +169,7 @@ class ViewTest(unittest.TestCase):
 
         data = {}
         tcount = 0
-        for entry in Person.view_query(in_parent=parent_key):
+        for entry in PersonView.view_query(in_parent=parent_key):
             # Skip itself
             if entry['key'] == parent_key:
                 continue
@@ -178,11 +185,11 @@ class ViewTest(unittest.TestCase):
         urlsafe_key = key.urlsafe()
         self.assertIsNotNone(key.get())
 
-        Person.view_delete(urlsafe_key)
+        PersonView.view_delete(urlsafe_key)
         self.assertIsNone(key.get())
 
         tcount = 0
-        for _ in Person.view_query():
+        for _ in PersonView.view_query():
             tcount += 1
         self.assertEqual(tcount, 2)
 

@@ -1,6 +1,6 @@
 {
     "idperson": 10101,
-    "type": "Person",
+    "type": "PersonView",
     "parent_key": "",
     "name": "Jerry Martin",
     "balance": 23.45,

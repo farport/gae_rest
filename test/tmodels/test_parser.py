@@ -62,6 +62,7 @@ class ModelParserTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        testlib.SharedTestData.unload()
         cls.shared = testlib.SharedTestData()
         # timestamp of 1492950082 in datetime:
         cls.create_dt = datetime.datetime(2017, 4, 23, 14, 21, 22)

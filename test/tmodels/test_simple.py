@@ -50,6 +50,7 @@ class SimpleNdbNestedTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
+        testlib.SharedTestData.unload()
         cls.shared = testlib.SharedTestData()
         cls.maxDiff = None
 
