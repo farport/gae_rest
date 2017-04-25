@@ -36,7 +36,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 TRUNNER = TestRunner()
 ENV = tasks.Environment()
-ALL_TASKS = ['tcore.default', 'tmodels.default']
+ALL_TASKS = ['tcore.default', 'tmodels.default', 'troutes.default']
 
 
 def task_exists(task_name):

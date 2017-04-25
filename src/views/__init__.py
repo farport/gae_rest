@@ -23,7 +23,18 @@ with ConfigurationStore() as c:
 # Define Exceptions
 #
 class NdbViewError(NdbModelError):
+    '''Generic and base view error'''
     pass
+
+class ViewValueError(NdbViewError):
+    '''Value Error for View'''
+    pass
+
+class KeyMisMatchViewError(NdbViewError):
+    '''Key from url does not match from key property found in dictionary'''
+    def __init__(self, json_key, url_key):
+        message = "Key provided in the JSON '%s' does not match the one URL '%s'" % (json_key, url_key)
+        super(KeyMisMatchViewError, self).__init__(message)
 
 
 # ==============================================================================
@@ -101,6 +112,7 @@ class NdbViewMixIn(object):
 
         for attr, reskey in cls.ATTRIBUTE_RESULT_MAP.iteritems():
             attr_value = getattr(cls, attr)
+            LOGGER.debug("%s._read_dict_attributes checking attribute: %s=%s", cls.__name__, attr, attr_value)
             if attr_value and attr_value in in_dict:
                 # Make sure that classname is used correctly
                 if attr == "_classname_property":
@@ -110,6 +122,7 @@ class NdbViewMixIn(object):
                 result[reskey] = in_dict[attr_value]
                 del in_dict[attr_value]
 
+        LOGGER.debug("%s._read_dict_attributes result keys: %s", cls.__name__, result.keys())
         return result
 
     @classmethod
@@ -136,12 +149,14 @@ class NdbViewMixIn(object):
     def view_query(cls, *args, **kwargs):
         '''
         Return a generator of items, accepting a `in_parent` which is urlsafe key
+
+        Exceptions: InvalidKeyError
         '''
         cls.__init_class_variables()
 
         # Convert urlsafe from in_parent to ndb.Key for ancestor
         if 'in_parent' in kwargs:
-            parent = cls.get_by_urlsafe(kwargs['in_parent'], key_only=True)
+            parent = cls.get_key_by_urlsafe(kwargs['in_parent'], raise_exception=True)
             del kwargs['in_parent']
             kwargs['ancestor'] = parent
 
@@ -151,15 +166,25 @@ class NdbViewMixIn(object):
 
     @classmethod
     def view_get(cls, urlsafe_key):
-        '''Get a dictionary for the given string based key'''
+        '''
+        Get a dictionary for the given string based key
+
+        Exceptions: InvalidKeyError, NdbModelMismatchError
+        '''
+        LOGGER.debug("%s.get called with key '%s'", cls.__name__, urlsafe_key)
         cls.__init_class_variables()
         model = cls.get_by_urlsafe(urlsafe_key)
-        return cls._set_dict_attributes(model)
+        if model:
+            return cls._set_dict_attributes(model)
 
     @classmethod
     def view_delete(cls, urlsafe_key):
-        '''Delete the entry'''
-        key = cls.get_by_urlsafe(urlsafe_key, key_only=True)
+        '''
+        Delete the entry
+
+        Exceptions: InvalidKeyError
+        '''
+        key = cls.get_key_by_urlsafe(urlsafe_key, raise_exception=True)
         key.delete()
 
     @classmethod
@@ -167,44 +192,70 @@ class NdbViewMixIn(object):
         '''
         Create an entry and return dictionary
         NOTE: Incoming dictionary will be modified
+
+        Exceptions: NdbViewError, InvalidKeyError, NdbModelMismatchError
         '''
         cls.__init_class_variables()
         parsed = cls._read_dict_attributes(in_dict)
+
+        # key property is not allowed on created.  If not trapped, it would simply be ignored
+        if 'key' in parsed:
+            raise ViewValueError("'%s' key entry is not expected in the .view_create method" % parsed['key'])
+
         model = cls.create_from_dict(in_dict, in_id=parsed.get('id'), in_parent=parsed.get('parent'), skip_null_value=skip_null_value)
         model.put()
         return cls._set_dict_attributes(model)
 
     @classmethod
-    def view_update(cls, in_dict, skip_null_value=False):
+    def _validate_input_urlsafe_key(self, key_property, in_key):
+        '''
+        Used by methods that could pass both the urlsafe_key and key property
+
+        Exception: ViewValueError, KeyMisMatchViewError
+        '''
+        if key_property is None and in_key is None:
+            raise ViewValueError("Key property or urlsafe_key is required for this operation.")
+
+        if key_property is None:
+            result = in_key
+        elif in_key is None:
+            result = key_property
+        else:
+            if in_key == key_property:
+                result = in_key
+            else:
+                raise KeyMisMatchViewError(key_property, in_key)
+
+        return result
+
+    @classmethod
+    def view_update(cls, in_dict, in_key=None, skip_null_value=False):
         '''
         Update the incoming in_dict
         NOTE: Incoming dictionary will be modified
+
+        Exception: ViewValueError, KeyMisMatchViewError
         '''
         cls.__init_class_variables()
         parsed = cls._read_dict_attributes(in_dict)
-        model = cls.update_from_dict(in_dict, in_key=parsed.get('key'), skip_null_value=skip_null_value)
-        model.put()
-        return cls._set_dict_attributes(model)
+        key = cls._validate_input_urlsafe_key(parsed.get('key'), in_key)
+        model = cls.update_from_dict(in_dict, in_key=key, skip_null_value=skip_null_value)
+        if model:
+            model.put()
+            return cls._set_dict_attributes(model)
 
     @classmethod
-    def view_patch(cls, in_dict, skip_null_value=False):
+    def view_patch(cls, in_dict, in_key=None, skip_null_value=False):
         '''
         Patch the incoming in_dict
         NOTE: Incoming dictionary will be modified
+
+        Exception: ViewValueError, KeyMisMatchViewError
         '''
         cls.__init_class_variables()
         parsed = cls._read_dict_attributes(in_dict)
-        model = cls.patch_from_dict(in_dict, in_key=parsed.get('key'), skip_null_value=skip_null_value)
-        model.put()
-        return cls._set_dict_attributes(model)
-
-
-
-
-
-# ==============================================================================
-# Define RestAction
-#
-class BaseRestAction(object):
-    def __init__(self, blueprint, **kwargs):
-        pass
+        key = cls._validate_input_urlsafe_key(parsed.get('key'), in_key)
+        model = cls.patch_from_dict(in_dict, in_key=key, skip_null_value=skip_null_value)
+        if model:
+            model.put()
+            return cls._set_dict_attributes(model)

@@ -428,14 +428,18 @@ class NdbModelMixIn(object):
 
     @classmethod
     def create_from_dict(cls, in_dict, in_id=None, in_parent=None, skip_null_value=False):
-        '''Create a new model from a dictionary'''
+        '''
+        Create a new model from a dictionary
+
+        Exceptions: InvalidKeyError (for parent key)
+        '''
         creation_kwargs = {}
 
         if in_id:
             creation_kwargs["id"] = in_id
 
         if in_parent is not None:
-            creation_kwargs["parent"] = ModelParser.decode_ndb_key(in_parent)
+            creation_kwargs["parent"] = cls.get_key_by_urlsafe(in_parent, raise_exception=True)
 
         model = cls(**creation_kwargs)
         return model.update(in_dict, skip_null_value=skip_null_value)
@@ -448,7 +452,7 @@ class NdbModelMixIn(object):
         Exceptions: InvalidKeyError, NdbModelMismatchError
         '''
 
-        key = ModelParser.decode_ndb_key(in_key, raise_exception=True)
+        key = cls.get_key_by_urlsafe(in_key, raise_exception=True)
         model = key.get()
         if model is None:
             err_message = "Entry not found for key %s" % in_key
@@ -465,7 +469,7 @@ class NdbModelMixIn(object):
         Exceptions: InvalidKeyError, NdbModelMismatchError
         '''
 
-        key = ModelParser.decode_ndb_key(in_key, raise_exception=True)
+        key = cls.get_key_by_urlsafe(in_key, raise_exception=True)
         model = key.get()
         if model is None:
             err_message = "Entry not found for key %s" % in_key
@@ -475,22 +479,29 @@ class NdbModelMixIn(object):
         return model.patch(in_dict, skip_null_value=skip_null_value)
 
     @classmethod
-    def get_by_urlsafe(cls, urlsafe_key, key_only=False):
-        '''Get an entity by key in urlsafe format.'''
+    def get_key_by_urlsafe(cls, urlsafe_key, raise_exception=False):
+        '''
+        Simple wrapper around ModelParser.decode_ndb_key
 
-        key = ModelParser.decode_ndb_key(urlsafe_key)
+        Exception: InvalidKeyError
+        '''
+        return ModelParser.decode_ndb_key(urlsafe_key, raise_exception=raise_exception)
+
+    @classmethod
+    def get_by_urlsafe(cls, urlsafe_key):
+        '''
+        Get an entity by key in urlsafe format.
+
+        Exceptions: InvalidKeyError, NdbModelMismatchError
+        '''
+        key = cls.get_key_by_urlsafe(urlsafe_key, raise_exception=True)
         if key is None:
             return None
 
-        if key_only:
-            return key
-        else:
-            entry = key.get()
-            if entry:
-                cls.__raise_if_not_same_class(entry, urlsafe_key)
-                return entry
-            else:
-                return None
+        entry = key.get()
+        if entry:
+            cls.__raise_if_not_same_class(entry, urlsafe_key)
+            return entry
 
     @classmethod
     def get_first(cls, *args, **kwargs):

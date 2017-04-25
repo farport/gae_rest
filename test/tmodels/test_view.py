@@ -10,7 +10,7 @@ import testlib
 
 from google.appengine.ext import ndb
 from models import NdbModelMixIn, ModelParser, NdbModelMismatchError # pylint: disable=E0401
-from views import NdbViewMixIn # pylint: disable=E0401
+from views import NdbViewMixIn, NdbViewError, KeyMisMatchViewError # pylint: disable=E0401
 
 READER = testlib.JsonDataReader(__file__)
 
@@ -137,13 +137,26 @@ class ViewTest(unittest.TestCase):
         self.assertDictEqual(person, result)
         self.shared.set(person, "person03_result")
 
-    def test08_view_create_error(self):
+    def test08_view_create_w_key_error(self):
+        '''Make sure that wrong _classname_property setting raise exception'''
+        data = self.get_data("person01.json")
+        data['key'] = self.shared.get("person01_key").urlsafe()
+        self.assertRaises(NdbViewError, PersonView.view_create, data)
+
+    def test09_view_create_wrong_type(self):
         '''Make sure that wrong _classname_property setting raise exception'''
         data = self.get_data("person01.json")
         data["type"] = "Person"
         self.assertRaises(NdbModelMismatchError, PersonView.view_create, data)
 
-    def test10_view_query(self):
+    def test10_view_update_error(self):
+        '''Key used as input if differ from propety should raise KeyMisMatchViewError'''
+        data = self.get_data("person01_update.json")
+        key = self.shared.get("person01_key")
+        data["key"] = self.shared.get("person02_key").urlsafe()
+        self.assertRaises(KeyMisMatchViewError, PersonView.view_update, data, in_key=key.urlsafe())
+
+    def test20_view_query(self):
         '''Make sure query works'''
         result = {}
         for entry in ('person01', 'person02', 'person03'):
@@ -159,7 +172,7 @@ class ViewTest(unittest.TestCase):
         self.assertEqual(tcount, 3)
         self.assertDictEqual(data, result)
 
-    def test11_view_query_parent(self):
+    def test21_view_query_parent(self):
         '''Make sure query by parent works'''
         parent_key = self.shared.get("person01_key").urlsafe()
         result = {}
@@ -179,7 +192,7 @@ class ViewTest(unittest.TestCase):
         self.assertEqual(tcount, 1)
         self.assertDictEqual(data, result)
 
-    def test12_view_delete(self):
+    def test22_view_delete(self):
         '''Make sure view_delete works'''
         key = self.shared.get("person01_key")
         urlsafe_key = key.urlsafe()

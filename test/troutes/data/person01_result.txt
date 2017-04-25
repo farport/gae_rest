@@ -1,0 +1,7 @@
+{
+  "balance": 12.34,
+  "created_on": "2017-04-20T18:56:39.075310",
+  "idperson": 1,
+  "key": "agx0ZXN0YmVkLXRlc3RyDQsSB1JQZXJzb24YAQw",
+  "name": "Mario Fiori"
+}

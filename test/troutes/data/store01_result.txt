@@ -1,0 +1,6 @@
+{
+  "city": "Rome",
+  "idstore": 1,
+  "name": "Main Store",
+  "ref": "agx0ZXN0YmVkLXRlc3RyDAsSBlJTdG9yZRgBDA"
+}
