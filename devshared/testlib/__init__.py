@@ -229,17 +229,27 @@ class JsonDataReader(object):
         else:
             raise IOError("Required directory not found: %s" % data_dir)
 
+    def parse(self, in_text):
+        '''Return json from text'''
+        data = json.loads(in_text)
+        if isinstance(data, list):
+            result = []
+            for entry in data:
+                result.append(EasyAccessDict(entry))
+        else:
+            result = EasyAccessDict(data)
+        return result
+
     def get(self, *paths):
         '''
         Return the json data if file ends with json.  Otherwise, return the content.
         '''
         data_file = os.path.join(self._data_dir, *paths)
         with open(data_file, "r") as _:
+            text = _.read()
             if data_file.endswith(".json"):
-                data = json.load(_)
-                return EasyAccessDict(data)
-
-            return _.read()
+                return self.parse(text)
+            return text
 
 
 class EasyAccessDict(dict):
